@@ -47,7 +47,8 @@ public class BlockNetherOres extends Block implements INetherOre {
 
         // 1) Et Futurum common names
         try {
-            if (Loader.isModLoaded("etfuturum")) {
+            if (NetherOresCore.enableEtFuturumCompat != null && NetherOresCore.enableEtFuturumCompat.getBoolean(true)
+                && Loader.isModLoaded("etfuturum")) {
                 ItemStack s = GameRegistry.findItemStack("etfuturum", "raw" + base, 1);
                 if (s != null) return s.copy();
             }
@@ -64,6 +65,11 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
     public static void prefillRawCache() {
+        // Only prefill if etfuturum compat is enabled. If the property is missing, default to true.
+        if (NetherOresCore.enableEtFuturumCompat != null && !NetherOresCore.enableEtFuturumCompat.getBoolean(true)) {
+            return;
+        }
+
         Ores[] all = Ores.values();
         for (Ores ore : all) {
             int key = ore.getBlockIndex() * 16 + ore.getMetadata();

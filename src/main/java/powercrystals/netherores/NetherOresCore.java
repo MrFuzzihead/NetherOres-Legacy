@@ -87,6 +87,7 @@ public class NetherOresCore extends BaseMod {
     public static Property hellFishMaxY;
     public static Property hellFishRetrogen;
     public static Property hellFishMaxHealth;
+    public static Property enableEtFuturumCompat;
     public static ConfigCategory overrideOres;
     private static Configuration config;
     @SidedProxy(
@@ -325,6 +326,10 @@ public class NetherOresCore extends BaseMod {
         }
 
         hellFishRetrogen = var2.get("WorldGen.HellFish", "Retrogen", true, "Retroactively generate HellFish");
+
+        // Et Futurum compatibility: if true, attempt to use etfuturum 'rawX' items when resolving raw ore drops.
+        enableEtFuturumCompat = var2.get("compat", "EtFuturumCompat", true);
+        enableEtFuturumCompat.comment = "If true, attempt to resolve raw ores using the Et Futurum 'raw' items (rawIron, rawGold, ...). Set false to skip Et Futurum-specific lookups.";
 
         for (Ores var6 : Ores.values()) {
             var6.loadConfig(var2);
