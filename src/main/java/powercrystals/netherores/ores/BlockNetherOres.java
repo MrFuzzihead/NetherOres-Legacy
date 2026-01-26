@@ -2,12 +2,11 @@ package powercrystals.netherores.ores;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-import cpw.mods.fml.common.Loader;
-import cpw.mods.fml.common.registry.GameRegistry;
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.enchantment.EnchantmentHelper;
@@ -15,16 +14,18 @@ import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.monster.EntityPigZombie;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
+import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.init.Items;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.IIcon;
 import net.minecraft.world.Explosion;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
-
 import net.minecraftforge.oredict.OreDictionary;
+
+import cpw.mods.fml.common.Loader;
+import cpw.mods.fml.common.registry.GameRegistry;
 import powercrystals.netherores.NetherOresCore;
 import powercrystals.netherores.entity.EntityArmedOre;
 import powercrystals.netherores.gui.NOCreativeTab;
@@ -36,7 +37,7 @@ public class BlockNetherOres extends Block implements INetherOre {
     private final IIcon[] _netherOresIcons = new IIcon[16];
     private final ThreadLocal<Boolean> explode = new ThreadLocal<>();
     private final ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
-    private static final ConcurrentMap<Integer, ItemStack> rawCache = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Integer, Optional<ItemStack>> rawCache = new ConcurrentHashMap<>();
 
     // Resolve raw item for a specific Ores value (no cache side effects).
     private static ItemStack resolveRawForOre(Ores ore) {
@@ -50,14 +51,13 @@ public class BlockNetherOres extends Block implements INetherOre {
                 ItemStack s = GameRegistry.findItemStack("etfuturum", "raw" + base, 1);
                 if (s != null) return s.copy();
             }
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) {}
         // 2) OreDictionary fallbacks
         try {
             List<ItemStack> stacks = OreDictionary.getOres("raw" + base);
-            if (stacks != null && !stacks.isEmpty()) return stacks.get(0).copy();
-        } catch (Throwable ignored) {
-        }
+            if (stacks != null && !stacks.isEmpty()) return stacks.get(0)
+                .copy();
+        } catch (Throwable ignored) {}
 
         return null;
     }
@@ -67,14 +67,14 @@ public class BlockNetherOres extends Block implements INetherOre {
         Ores[] all = Ores.values();
         for (Ores ore : all) {
             int key = ore.getBlockIndex() * 16 + ore.getMetadata();
-            if (rawCache.containsKey(key)) continue;
-            try {
-                ItemStack res = resolveRawForOre(ore);
-                // store result (maybe null)
-                rawCache.put(key, res);
-            } catch (Throwable t) {
-                rawCache.put(key, null);
-            }
+            // Use computeIfAbsent to populate atomically and avoid races / double-resolution.
+            rawCache.computeIfAbsent(key, k -> {
+                try {
+                    return Optional.ofNullable(resolveRawForOre(ore));
+                } catch (Throwable t) {
+                    return Optional.empty();
+                }
+            });
         }
     }
 
@@ -129,17 +129,26 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     private ItemStack findRawOreStack(int metadata) {
         int cacheKey = this._blockIndex * 16 + metadata;
-        if (rawCache.containsKey(cacheKey)) return rawCache.get(cacheKey);
-        int oreIndex = this._blockIndex * 16 + metadata;
-        Ores[] all = Ores.values();
-        if (oreIndex < 0 || oreIndex >= all.length) {
-            rawCache.put(cacheKey, null);
-            return null;
-        }
-        Ores ore = all[oreIndex];
-        ItemStack resolved = resolveRawForOre(ore);
-        rawCache.put(cacheKey, resolved);
-        return resolved;
+        // Atomically compute and possibly refresh the Optional<ItemStack>.
+        Optional<ItemStack> opt = rawCache.compute(cacheKey, (k, existing) -> {
+            int oreIndex = k; // same encoding used for the key
+            Ores[] all = Ores.values();
+            if (oreIndex < 0 || oreIndex >= all.length) {
+                return Optional.empty();
+            }
+            // If we already have a resolved value, keep it. If it's empty, try resolving again.
+            if (existing != null && existing.isPresent()) {
+                return existing;
+            }
+            Ores ore = all[oreIndex];
+            try {
+                return Optional.ofNullable(resolveRawForOre(ore));
+            } catch (Throwable t) {
+                return Optional.empty();
+            }
+        });
+
+        return opt == null ? null : opt.orElse(null);
     }
 
     // Return a vanilla Minecraft base-item for special ores (Coal, Diamond, Emerald, Lapis, Redstone).
