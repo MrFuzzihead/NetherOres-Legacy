@@ -13,13 +13,13 @@ public class NOCreativeTab extends CreativeTabs {
       super(var1);
    }
 
-   public String func_78024_c() {
-      return this.func_78013_b();
+   public String getTranslatedTabLabel() {
+      return this.getTabLabel();
    }
 
    @SideOnly(Side.CLIENT)
-   public Item func_78016_d() {
-      return Item.func_150898_a(NetherOresCore.blockNetherOres[0]);
+   public Item getTabIconItem() {
+      return Item.getItemFromBlock(NetherOresCore.blockNetherOres[0]);
    }
 
    @SideOnly(Side.CLIENT)

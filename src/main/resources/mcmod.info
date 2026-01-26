@@ -1,22 +1,25 @@
 [
     {
-        "name": "Nether Ores",
-        "parent": "",
-        "url": "http://minecraft.curseforge.com/mc-mods/netherores/",
+        "modid": "${modId}",
+        "name": "${modName}",
+        "version": "${modVersion}",
+        "mcversion": "${minecraftVersion}",
+        "url": "",
+        "credits": "",
+        "authorList": [
+          "PowerCrystals",
+          "TehKrush",
+          "AtomicStryker",
+          "skyboy026",
+          "MrFuzzihead"
+        ],
+        "description": "Introduces mine-able yet dangerous ores to the Nether",
         "logoFile": "",
         "updateUrl": "",
-        "credits": "",
-        "version": "2.3.1",
-        "modid": "NetherOres",
-        "authorList": [
-            "PowerCrystals",
-            "TehKrush",
-            "AtomicStryker",
-            "skyboy026"
-        ],
-        "mcversion": "1.7.10",
+        "parent": "",
         "screenshots": [],
-        "dependencies": [],
-        "description": "Introduces mineable yet dangerous ores to the Nether"
+        "dependencies": [
+          "CoFHCore"
+        ]
     }
 ]

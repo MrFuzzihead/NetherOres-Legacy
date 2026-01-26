@@ -182,26 +182,26 @@ public enum Ores {
       if (!this._registeredSmelting) {
          this._registeredSmelting = true;
          if (NetherOresCore.enableStandardFurnaceRecipes.getBoolean(true)) {
-            ItemStack var2 = var1.func_77946_l();
-            var2.field_77994_a = this._smeltCount;
-            FurnaceRecipes.func_77602_a().func_151394_a(this.getItemStack(1), var2, 1.0F);
+            ItemStack var2 = var1.copy();
+            var2.stackSize = this._smeltCount;
+            FurnaceRecipes.smelting().func_151394_a(this.getItemStack(1), var2, 1.0F);
          }
 
          if (NetherOresCore.enableInductionSmelterRecipes.getBoolean(true) && Loader.isModLoaded("ThermalExpansion")) {
             ItemStack var10 = this.getItemStack(1);
-            ItemStack var3 = new ItemStack(Blocks.field_150354_m);
+            ItemStack var3 = new ItemStack(Blocks.sand);
             ItemStack var4 = GameRegistry.findItemStack("ThermalExpansion", "slagRich", 1);
             ItemStack var5 = GameRegistry.findItemStack("ThermalExpansion", "slag", 1);
-            ItemStack var6 = var1.func_77946_l();
+            ItemStack var6 = var1.copy();
             int var7 = this._smeltCount;
             if (!NetherOresCore.enableSmeltToOres.getBoolean(true)) {
                var7 *= 2;
             }
 
-            var6.field_77994_a = var7;
-            ItemStack var8 = var1.func_77946_l();
+            var6.stackSize = var7;
+            ItemStack var8 = var1.copy();
             int var9 = var7 + (int)Math.ceil(var7 / 3.0F);
-            var8.field_77994_a = var9;
+            var8.stackSize = var9;
             ThermalExpansionHelper.addSmelterRecipe(1600 * var7, var10, var3, var6, var4, 10);
             ThermalExpansionHelper.addSmelterRecipe(2400 * var9, var10, var4, var8, var5, 100);
          }
@@ -217,15 +217,15 @@ public enum Ores {
 
          if (NetherOresCore.enablePulverizerRecipes.getBoolean(true) && Loader.isModLoaded("ThermalExpansion")) {
             ItemStack var2 = this.getItemStack(1);
-            ItemStack var3 = var1.func_77946_l();
-            ItemStack var4 = new ItemStack(Blocks.field_150424_aL);
-            var3.field_77994_a = this._pulvCount;
-            var4.field_77994_a = 1;
+            ItemStack var3 = var1.copy();
+            ItemStack var4 = new ItemStack(Blocks.netherrack);
+            var3.stackSize = this._pulvCount;
+            var4.stackSize = 1;
             ThermalExpansionHelper.addPulverizerRecipe(3200, var2, var3, var4, 15);
          }
 
          if (NetherOresCore.enableGrinderRecipes.getBoolean(true) && Loader.isModLoaded("appliedenergistics2")) {
-            this.registerAEGrinder(var1.func_77946_l());
+            this.registerAEGrinder(var1.copy());
          }
       }
    }
@@ -233,15 +233,15 @@ public enum Ores {
    @Strippable({"mod:IC2"})
    private void registerMacerator(ItemStack var1) {
       ItemStack var2 = this.getItemStack(1);
-      ItemStack var3 = var1.func_77946_l();
-      var3.field_77994_a = this._pulvCount;
-      Recipes.macerator.addRecipe(new RecipeInputItemStack(var2), null, new ItemStack[]{var3.func_77946_l()});
+      ItemStack var3 = var1.copy();
+      var3.stackSize = this._pulvCount;
+      Recipes.macerator.addRecipe(new RecipeInputItemStack(var2), null, new ItemStack[]{var3.copy()});
    }
 
    @Strippable({"mod:appliedenergistics2"})
    private void registerAEGrinder(ItemStack var1) {
-      ItemStack var2 = var1.func_77946_l();
-      var2.field_77994_a = this._pulvCount;
+      ItemStack var2 = var1.copy();
+      var2.stackSize = this._pulvCount;
       IGrinderRegistry var3 = AEApi.instance().registries().grinder();
 
       for (ItemStack var5 : OreDictionary.getOres(this.getOreName())) {

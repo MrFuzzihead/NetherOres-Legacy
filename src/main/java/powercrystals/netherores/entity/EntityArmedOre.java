@@ -15,10 +15,10 @@ public class EntityArmedOre extends Entity {
 
    public EntityArmedOre(World var1) {
       super(var1);
-      super.field_70145_X = true;
-      super.field_70156_m = false;
-      this.func_70105_a(0.0F, 0.0F);
-      super.field_70129_M = super.field_70131_O / 2.0F;
+      super.noClip = true;
+      super.preventEntitySpawning = false;
+      this.setSize(0.0F, 0.0F);
+      super.yOffset = super.height / 2.0F;
    }
 
    public EntityArmedOre(World var1, double var2, double var4, double var6) {
@@ -26,80 +26,80 @@ public class EntityArmedOre extends Entity {
    }
 
    public EntityArmedOre(World var1, double var2, double var4, double var6, Block var8) {
-      this(var1);
-      this.func_70107_b(var2, var4, var6);
-      super.field_70159_w = 0.0;
-      super.field_70181_x = 0.0;
-      super.field_70179_y = 0.0;
-      this._fuse = 80;
-      super.field_70169_q = var2;
-      super.field_70167_r = var4;
-      super.field_70166_s = var6;
-      this._target = var8;
-      if (this._target != null) {
-         this.func_70050_g(Block.func_149682_b(this._target));
-      } else {
-         this.func_70050_g(-1);
-      }
+       this(var1);
+       this.setPosition(var2, var4, var6);
+       super.motionX = (double)0.0F;
+       super.motionY = (double)0.0F;
+       super.motionZ = (double)0.0F;
+       this._fuse = 80;
+       super.prevPosX = var2;
+       super.prevPosY = var4;
+       super.prevPosZ = var6;
+       this._target = var8;
+       if (this._target != null) {
+           this.setAir(Block.getIdFromBlock(this._target));
+       } else {
+           this.setAir(-1);
+       }
    }
 
-   protected void func_70088_a() {
+   protected void entityInit() {
    }
 
-   public boolean func_70041_e_() {
+   public boolean canTriggerWalking() {
       return false;
    }
 
-   public boolean func_70067_L() {
+   public boolean canBeCollidedWith() {
       return false;
    }
 
-   public void func_70071_h_() {
+   public void onUpdate() {
       if (this._fuse-- <= 0) {
-         this.func_70106_y();
-         if (!super.field_70170_p.field_72995_K) {
-            this.func_82142_c(true);
+         this.setDead();
+         if (!super.worldObj.isRemote) {
+            this.setInvisible(true);
             this.explode();
          }
-      } else if (super.field_70170_p.field_72995_K) {
-         if (this.func_82150_aj()) {
-            this.func_70106_y();
+      } else if (super.worldObj.isRemote) {
+         if (this.isInvisible()) {
+            this.setDead();
          }
 
-         Block var1 = super.field_70170_p
-            .func_147439_a(
-               MathHelper.func_76128_c(super.field_70165_t), MathHelper.func_76128_c(super.field_70163_u), MathHelper.func_76128_c(super.field_70161_v)
+         Block var1 = super.worldObj
+            .getBlock(
+               MathHelper.floor_double(super.posX), MathHelper.floor_double(super.posY), MathHelper.floor_double(super.posZ)
             );
-         if (Block.func_149682_b(var1) == this.func_70086_ai()) {
-            super.field_70170_p.func_72869_a("smoke", super.field_70165_t, super.field_70163_u + 0.5, super.field_70161_v, 0.0, 0.0, 0.0);
+         if (Block.getIdFromBlock(var1) == this.getAir()) {
+            super.worldObj.spawnParticle("smoke", super.posX, super.posY + 0.5, super.posZ, 0.0, 0.0, 0.0);
          }
       }
    }
 
    private void explode() {
-      Block var1 = super.field_70170_p
-         .func_147439_a(
-            MathHelper.func_76128_c(super.field_70165_t), MathHelper.func_76128_c(super.field_70163_u), MathHelper.func_76128_c(super.field_70161_v)
+      Block var1 = super.worldObj
+         .getBlock(
+            MathHelper.floor_double(super.posX), MathHelper.floor_double(super.posY), MathHelper.floor_double(super.posZ)
          );
       if (var1 == this._target) {
-         super.field_70170_p
-            .func_72885_a(null, super.field_70165_t, super.field_70163_u, super.field_70161_v, NetherOresCore.explosionPower.getInt(), true, true);
+         super.worldObj
+            .newExplosion(null, super.posX, super.posY, super.posZ, NetherOresCore.explosionPower.getInt(), true, true);
       }
    }
 
-   protected void func_70014_b(NBTTagCompound var1) {
-      var1.func_74774_a("Fuse", (byte)this._fuse);
-      var1.func_74778_a("STarget", Block.field_149771_c.func_148750_c(this._target));
+   protected void writeEntityToNBT(NBTTagCompound var1) {
+      var1.setByte("Fuse", (byte)this._fuse);
+      var1.setString("STarget", Block.blockRegistry.getNameForObject(this._target));
    }
 
-   protected void func_70037_a(NBTTagCompound var1) {
-      this._fuse = var1.func_74771_c("Fuse");
-      this._target = Block.func_149684_b(var1.func_74764_b("Target") ? Integer.toString(var1.func_74762_e("Target")) : var1.func_74779_i("STarget"));
-      this.func_70050_g(Block.func_149682_b(this._target));
+   protected void readEntityFromNBT(NBTTagCompound var1) {
+      this._fuse = var1.getByte("Fuse");
+      this._target = Block.getBlockFromName(var1.hasKey("Target") ? Integer.toString(var1.getInteger("Target")) : var1.getString("STarget"));
+      this.setAir(Block.getIdFromBlock(this._target));
    }
 
    @SideOnly(Side.CLIENT)
-   public float func_70053_R() {
+   public float getShadowSize() {
       return 0.0F;
    }
 }

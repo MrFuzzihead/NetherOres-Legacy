@@ -14,7 +14,7 @@ public class NetherOresWorldGenHandler implements IFeatureGenerator {
    }
 
    public boolean generateFeature(Random var1, int var2, int var3, World var4, boolean var5) {
-      if (var4.field_73011_w.field_76574_g != -1 && !NetherOresCore.worldGenAllDimensions.getBoolean(false)) {
+      if (var4.provider.dimensionId != -1 && !NetherOresCore.worldGenAllDimensions.getBoolean(false)) {
          return false;
       } else {
          this.generateNether(var4, var1, var2 * 16, var3 * 16, var5);
@@ -37,7 +37,7 @@ public class NetherOresWorldGenHandler implements IFeatureGenerator {
                   int var12 = var9.getMinY() + var2.nextInt(var9.getMaxY() - var9.getMinY());
                   int var13 = var4 + var2.nextInt(16);
                   new WorldGenNetherOres(NetherOresCore.getOreBlock(var9.getBlockIndex()), var9.getMetadata(), var9.getBlocksPerGroup())
-                     .func_76484_a(var1, var2, var11, var12, var13);
+                     .generate(var1, var2, var11, var12, var13);
                }
             }
          }
@@ -53,7 +53,7 @@ public class NetherOresWorldGenHandler implements IFeatureGenerator {
             int var18 = var3 + var2.nextInt(16);
             int var19 = var15 + var2.nextInt(var16 - var15);
             int var20 = var4 + var2.nextInt(16);
-            new WorldGenNetherOres(NetherOresCore.blockHellfish, 0, var14).func_76484_a(var1, var2, var18, var19, var20);
+            new WorldGenNetherOres(NetherOresCore.blockHellfish, 0, var14).generate(var1, var2, var18, var19, var20);
          }
       }
    }

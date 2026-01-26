@@ -13,23 +13,23 @@ public class ItemBlockNetherOre extends ItemBlock {
 
    public ItemBlockNetherOre(Block var1) {
       super(var1);
-      this.func_77627_a(true);
-      this.func_77656_e(0);
+      this.setHasSubtypes(true);
+      this.setMaxDamage(0);
       this._block = (BlockNetherOres)var1;
    }
 
-   public int func_77647_b(int var1) {
+   public int getMetadata(int var1) {
       return var1;
    }
 
-   public String func_77667_c(ItemStack var1) {
+   public String getUnlocalizedName(ItemStack var1) {
       int var2 = this._block.getBlockIndex();
       Ores[] var3 = Ores.values();
-      int var4 = Math.min(var2 * 16 + var1.func_77960_j(), var3.length - 1);
+      int var4 = Math.min(var2 * 16 + var1.getItemDamage(), var3.length - 1);
       return "tile.netherores.ore." + var3[var4].name().toLowerCase(Locale.US);
    }
 
-   public void func_150895_a(Item var1, CreativeTabs var2, List var3) {
+   public void getSubItems(Item var1, CreativeTabs var2, List var3) {
       int var4 = this._block.getBlockIndex();
       Ores[] var5 = Ores.values();
       int var6 = 0;

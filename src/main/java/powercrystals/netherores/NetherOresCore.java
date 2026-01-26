@@ -45,21 +45,20 @@ import powercrystals.netherores.world.BlockHellfish;
 import powercrystals.netherores.world.NetherOresWorldGenHandler;
 
 @Mod(
-   modid = "NetherOres",
-   name = "Nether Ores",
-   version = "1.7.10R2.3.1",
-   dependencies = "required-after:CoFHCore@[1.7.10R3.1.0,1.7.10R3.2.0);",
+   modid = NetherOresCore.MODID,
+   name = NetherOresCore.MODNAME,
+   version = Tags.VERSION,
+   dependencies = NetherOresCore.DEPENDENCIES,
    customProperties = {@CustomProperty(
       k = "cofhversion",
       v = "true"
    )}
 )
 public class NetherOresCore extends BaseMod {
-   public static final String modId = "NetherOres";
-   public static final String modName = "Nether Ores";
-   public static final String version = "1.7.10R2.3.1";
-   public static final String dependencies = "required-after:CoFHCore@[1.7.10R3.1.0,1.7.10R3.2.0);";
-   public static final String mobTextureFolder = "netherores:textures/mob/";
+   public static final String MODID = "NetherOres";
+   public static final String MODNAME = "NetherOres";
+   public static final String DEPENDENCIES = "required-after:CoFHCore@[1.7.10R3.1.0,1.7.10R3.2.0);";
+   public static final String MOBTEXTUREFOLDER = "netherores:textures/mob/";
    public static Block[] blockNetherOres = new Block[(Ores.values().length + 15) / 16];
    public static Block blockHellfish;
    public static Property enableWorldGen;
@@ -105,36 +104,33 @@ public class NetherOresCore extends BaseMod {
       int var2 = 0;
 
       for (int var3 = blockNetherOres.length; var2 < var3; var2++) {
-         Object var4 = blockNetherOres[var2] = new BlockNetherOres(var2);
-         GameRegistry.registerBlock((Block)var4, ItemBlockNetherOre.class, var4.func_149739_a());
+         Block var4 = blockNetherOres[var2] = new BlockNetherOres(var2);
+         GameRegistry.registerBlock(var4, ItemBlockNetherOre.class, var4.getUnlocalizedName());
       }
 
       blockHellfish = new BlockHellfish();
       GameRegistry.registerBlock(blockHellfish, ItemBlock.class, "netherOresBlockHellfish");
       GameRegistry.registerCustomItemStack("netherOresBlockHellfish", new ItemStack(blockHellfish));
       if (enableHellQuartz.getBoolean(true)) {
-         BlockNetherOverrideOre var6 = new BlockNetherOverrideOre(Blocks.field_150449_bY) {
+         BlockNetherOverrideOre var6 = new BlockNetherOverrideOre(Blocks.quartz_ore) {
             @Override
-            public int func_149679_a(int var1, Random var2x) {
+            public int quantityDroppedWithBonus(int var1, Random var2x) {
                synchronized (Blocks.class) {
-                  Blocks.field_150449_bY = super._override;
-                  int var3 = super._override.func_149679_a(var1, var2x);
-                  Blocks.field_150449_bY = this;
-                  return var3;
+                  // Don't assign to Blocks.quartz_ore (final). Call the original block's implementation directly.
+                  return super._override.quantityDroppedWithBonus(var1, var2x);
                }
             }
 
             @Override
-            public void func_149690_a(World var1, int var2x, int var3, int var4, int var5, float var6x, int var7) {
+            public void dropBlockAsItemWithChance(World var1, int var2x, int var3, int var4, int var5, float var6x, int var7) {
                synchronized (Blocks.class) {
-                  Blocks.field_150449_bY = super._override;
-                  super._override.func_149690_a(var1, var2x, var3, var4, var5, var6x, var7);
-                  Blocks.field_150449_bY = this;
+                  // Don't assign to Blocks.quartz_ore (final). Call the original block's implementation directly.
+                  super._override.dropBlockAsItemWithChance(var1, var2x, var3, var4, var5, var6x, var7);
                }
             }
          };
-         Blocks.field_150449_bY = var6;
-         RegistryUtils.overwriteEntry(Block.field_149771_c, "minecraft:quartz_ore", var6);
+         // Use RegistryUtils.overwriteEntry instead of assigning to Blocks.quartz_ore.
+         RegistryUtils.overwriteEntry(Block.blockRegistry, "minecraft:quartz_ore", var6);
       }
 
       for (Ores var5 : Ores.values()) {
@@ -160,32 +156,32 @@ public class NetherOresCore extends BaseMod {
    @EventHandler
    public void postInit(FMLPostInitializationEvent var1) {
       if (!enableSmeltToOres.getBoolean(true)) {
-         Ores.Coal.registerSmelting(new ItemStack(Items.field_151044_h));
+         Ores.Coal.registerSmelting(new ItemStack(Items.coal));
       }
 
       for (Ores var5 : Ores.values()) {
          String var6 = var5.getOreName();
-         if (enableSmeltToOres.getBoolean(true) && OreDictionary.getOres(var6).size() > 0) {
+         if (enableSmeltToOres.getBoolean(true) && !OreDictionary.getOres(var6).isEmpty()) {
             this.registerOreDictOre(var5, var6, (ItemStack)OreDictionary.getOres(var6).get(0));
          } else {
             var6 = var5.getSmeltName();
-            if (OreDictionary.getOres(var6).size() > 0) {
+            if (!OreDictionary.getOres(var6).isEmpty()) {
                this.registerOreDictSmelt(var5, var6, (ItemStack)OreDictionary.getOres(var6).get(0));
             }
          }
 
          var6 = var5.getDustName();
-         if (OreDictionary.getOres(var6).size() > 0) {
+         if (!OreDictionary.getOres(var6).isEmpty()) {
             this.registerOreDictDust(var5, var6, (ItemStack)OreDictionary.getOres(var6).get(0));
          }
 
          var6 = var5.getAltName();
-         if (OreDictionary.getOres(var6).size() > 0) {
+         if (!OreDictionary.getOres(var6).isEmpty()) {
             this.registerOreDictGem(var5, var6, (ItemStack)OreDictionary.getOres(var6).get(0));
          }
       }
 
-      Ores.Coal.registerPulverizing(new ItemStack(Items.field_151044_h));
+      Ores.Coal.registerPulverizing(new ItemStack(Items.coal));
       MinecraftForge.EVENT_BUS.register(this);
    }
 
@@ -195,11 +191,11 @@ public class NetherOresCore extends BaseMod {
 
       for (Entry var3 : overrideOres.getValues().entrySet()) {
          String var4 = (String)var3.getKey();
-         Block var5 = Block.func_149684_b(var4);
+         Block var5 = Block.getBlockFromName(var4);
          if (this.isBlockInvalid(var5)) {
             overrideOres.remove(var4);
          } else if (((Property)var3.getValue()).setRequiresMcRestart(true).getBoolean(true)) {
-            RegistryUtils.overwriteEntry(Block.field_149771_c, var4, new BlockNetherOverrideOre(var5));
+            RegistryUtils.overwriteEntry(Block.blockRegistry, var4, new BlockNetherOverrideOre(var5));
          }
       }
 
@@ -212,7 +208,7 @@ public class NetherOresCore extends BaseMod {
    }
 
    private boolean isBlockInvalid(Block var1) {
-      return Block.func_149682_b(var1) <= 175;
+      return Block.getIdFromBlock(var1) <= 175;
    }
 
    private void processIMC(List<IMCMessage> var1) {
@@ -221,7 +217,7 @@ public class NetherOresCore extends BaseMod {
             String var4 = var3.key;
             if ("registerOverrideOre".equals(var4)) {
                String var5 = var3.getStringValue();
-               Block var6 = Block.func_149684_b(var5);
+               Block var6 = Block.getBlockFromName(var5);
                if (this.isBlockInvalid(var6)) {
                   throw new IllegalArgumentException("Cannot override vanilla blocks via IMC.");
                }
@@ -357,14 +353,14 @@ public class NetherOresCore extends BaseMod {
    }
 
    public String getModId() {
-      return "NetherOres";
+      return MODID;
    }
 
    public String getModName() {
-      return "Nether Ores";
+      return MODNAME;
    }
 
    public String getModVersion() {
-      return "1.7.10R2.3.1";
+        return Tags.VERSION;
    }
 }
