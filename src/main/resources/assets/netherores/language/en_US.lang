@@ -1,6 +1,6 @@
 entity.NetherOres.netherOresHellfish.name = Hellfish
 
-tile.netherores.hellfish = tile.hellrock
+tile.netherores.hellfish = Infested Netherrack
 tile.netherores.ore.coal.name = Nether Coal Ore
 tile.netherores.ore.diamond.name = Nether Diamond Ore
 tile.netherores.ore.gold.name = Nether Gold Ore
@@ -18,8 +18,8 @@ tile.netherores.ore.ruby.name = Nether Ruby Ore
 tile.netherores.ore.peridot.name = Nether Peridot Ore
 tile.netherores.ore.sapphire.name = Nether Sapphire Ore
 tile.netherores.ore.platinum.name = Nether Platinum Ore 
-tile.netherores.ore.nickel.name = Nether Ferrous Ore
-tile.netherores.ore.steel.name = Nether Pig Iron Ore
+tile.netherores.ore.nickel.name = Nether Nickel Ore
+tile.netherores.ore.steel.name = Nether Steel Ore
 tile.netherores.ore.iridium.name = Nether Iridium Ore
 tile.netherores.ore.osmium.name = Nether Osmium Ore
 tile.netherores.ore.sulfur.name = Nether Sulfur Ore

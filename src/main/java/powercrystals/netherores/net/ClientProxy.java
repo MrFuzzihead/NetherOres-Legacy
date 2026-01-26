@@ -7,10 +7,11 @@ import powercrystals.netherores.render.RenderHellfish;
 import powercrystals.netherores.render.RendererArmedOre;
 
 public class ClientProxy extends ServerProxy {
-   @Override
-   public void load() {
-      super.load();
-      RenderingRegistry.registerEntityRenderingHandler(EntityArmedOre.class, new RendererArmedOre());
-      RenderingRegistry.registerEntityRenderingHandler(EntityHellfish.class, new RenderHellfish());
-   }
+
+    @Override
+    public void load() {
+        super.load();
+        RenderingRegistry.registerEntityRenderingHandler(EntityArmedOre.class, new RendererArmedOre());
+        RenderingRegistry.registerEntityRenderingHandler(EntityHellfish.class, new RenderHellfish());
+    }
 }
