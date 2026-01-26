@@ -137,6 +137,9 @@ public class NetherOresCore extends BaseMod {
             var5.load();
         }
 
+        // Prefill the raw-ore cache so first-break lookups are cheap at runtime
+        BlockNetherOres.prefillRawCache();
+
         EntityRegistry.registerModEntity(EntityArmedOre.class, "ArmedOre", 0, this, 80, 5, false);
         EntityRegistry.registerModEntity(EntityHellfish.class, "netherOresHellfish", 1, this, 160, 5, true);
     }

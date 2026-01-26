@@ -1,8 +1,13 @@
 package powercrystals.netherores.ores;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentHashMap;
 
+import cpw.mods.fml.common.Loader;
+import cpw.mods.fml.common.registry.GameRegistry;
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.enchantment.EnchantmentHelper;
@@ -10,12 +15,16 @@ import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.monster.EntityPigZombie;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.init.Items;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.IIcon;
 import net.minecraft.world.Explosion;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 
+import net.minecraftforge.oredict.OreDictionary;
 import powercrystals.netherores.NetherOresCore;
 import powercrystals.netherores.entity.EntityArmedOre;
 import powercrystals.netherores.gui.NOCreativeTab;
@@ -23,11 +32,51 @@ import powercrystals.netherores.world.BlockHellfish;
 
 public class BlockNetherOres extends Block implements INetherOre {
 
-    private static int _aggroRange = 32;
     private int _blockIndex = 0;
-    private IIcon[] _netherOresIcons = new IIcon[16];
-    private ThreadLocal<Boolean> explode = new ThreadLocal<>();
-    private ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
+    private final IIcon[] _netherOresIcons = new IIcon[16];
+    private final ThreadLocal<Boolean> explode = new ThreadLocal<>();
+    private final ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
+    private static final ConcurrentMap<Integer, ItemStack> rawCache = new ConcurrentHashMap<>();
+
+    // Resolve raw item for a specific Ores value (no cache side effects).
+    private static ItemStack resolveRawForOre(Ores ore) {
+        if (ore == null) return null;
+
+        String base = ore.name();
+
+        // 1) Et Futurum common names
+        try {
+            if (Loader.isModLoaded("etfuturum")) {
+                ItemStack s = GameRegistry.findItemStack("etfuturum", "raw" + base, 1);
+                if (s != null) return s.copy();
+            }
+        } catch (Throwable ignored) {
+        }
+        // 2) OreDictionary fallbacks
+        try {
+            List<ItemStack> stacks = OreDictionary.getOres("raw" + base);
+            if (stacks != null && !stacks.isEmpty()) return stacks.get(0).copy();
+        } catch (Throwable ignored) {
+        }
+
+        return null;
+    }
+
+    // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
+    public static void prefillRawCache() {
+        Ores[] all = Ores.values();
+        for (Ores ore : all) {
+            int key = ore.getBlockIndex() * 16 + ore.getMetadata();
+            if (rawCache.containsKey(key)) continue;
+            try {
+                ItemStack res = resolveRawForOre(ore);
+                // store result (maybe null)
+                rawCache.put(key, res);
+            } catch (Throwable t) {
+                rawCache.put(key, null);
+            }
+        }
+    }
 
     public BlockNetherOres(int var1) {
         super(Blocks.netherrack.getMaterial());
@@ -63,6 +112,126 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     public int quantityDropped(Random var1) {
         return 1;
+    }
+
+    @Override
+    public int quantityDroppedWithBonus(int fortune, Random rand) {
+        int base = quantityDropped(rand);
+        if (fortune > 0) {
+            int bonus = rand.nextInt(fortune + 2) - 1;
+            if (bonus < 0) {
+                bonus = 0;
+            }
+            return base + bonus;
+        }
+        return base;
+    }
+
+    private ItemStack findRawOreStack(int metadata) {
+        int cacheKey = this._blockIndex * 16 + metadata;
+        if (rawCache.containsKey(cacheKey)) return rawCache.get(cacheKey);
+        int oreIndex = this._blockIndex * 16 + metadata;
+        Ores[] all = Ores.values();
+        if (oreIndex < 0 || oreIndex >= all.length) {
+            rawCache.put(cacheKey, null);
+            return null;
+        }
+        Ores ore = all[oreIndex];
+        ItemStack resolved = resolveRawForOre(ore);
+        rawCache.put(cacheKey, resolved);
+        return resolved;
+    }
+
+    // Return a vanilla Minecraft base-item for special ores (Coal, Diamond, Emerald, Lapis, Redstone).
+    // Returns null for ores that shouldn't use vanilla base drops.
+    private ItemStack getVanillaBaseForSpecial(Ores ore) {
+        if (ore == null) return null;
+        return switch (ore) {
+            case Coal -> new ItemStack(Items.coal, 1, 0);
+            case Diamond -> new ItemStack(Items.diamond, 1);
+            case Emerald -> new ItemStack(Items.emerald, 1);
+            case Lapis ->
+                // Lapis drops dye (blue) with damage 4 in 1.7.10
+                new ItemStack(Items.dye, 1, 4);
+            case Redstone -> new ItemStack(Items.redstone, 1);
+            default -> null;
+        };
+    }
+
+    // Get vanilla base quantity (without fortune) for special ores. Used to compute 2x base.
+    private int getVanillaBaseQuantity(Ores ore, Random rand) {
+        if (ore == null) return 0;
+        return switch (ore) {
+            case Coal, Diamond, Emerald -> 1; // vanilla yields 1
+            case Lapis ->
+                // vanilla lapis drops 4-8 (4 + rand.nextInt(5))
+                4 + rand.nextInt(5);
+            case Redstone ->
+                // vanilla redstone drops 4-5 (4 + rand.nextInt(2))
+                4 + rand.nextInt(2);
+            default -> 0;
+        };
+    }
+
+    @Override
+    public Item getItemDropped(int metadata, Random rand, int fortune) {
+        int oreIndex = this._blockIndex * 16 + metadata;
+        Ores[] all = Ores.values();
+        if (oreIndex >= 0 && oreIndex < all.length) {
+            Ores ore = all[oreIndex];
+            ItemStack vanilla = getVanillaBaseForSpecial(ore);
+            if (vanilla != null) return vanilla.getItem();
+        }
+        ItemStack raw = findRawOreStack(metadata);
+        if (raw != null) return raw.getItem();
+        return Item.getItemFromBlock(this);
+    }
+
+    @Override
+    public ArrayList<ItemStack> getDrops(World world, int x, int y, int z, int metadata, int fortune) {
+        ArrayList<ItemStack> ret = new ArrayList<>();
+
+        // Priority 1: special vanilla-mapped ores (Coal, Diamond, Emerald, Lapis, Redstone)
+        int oreIndex = this._blockIndex * 16 + metadata;
+        Ores[] all = Ores.values();
+        if (oreIndex >= 0 && oreIndex < all.length) {
+            Ores ore = all[oreIndex];
+            ItemStack vanilla = getVanillaBaseForSpecial(ore);
+            if (vanilla != null) {
+                int vanillaBase = getVanillaBaseQuantity(ore, world.rand);
+                int base = vanillaBase * 2; // 2x vanilla base
+                int bonus = 0;
+                if (fortune > 0) {
+                    bonus = world.rand.nextInt(fortune + 2) - 1;
+                    if (bonus < 0) bonus = 0;
+                }
+                int qty = base + bonus;
+                ItemStack out = vanilla.copy();
+                out.stackSize = qty;
+                ret.add(out);
+                return ret;
+            }
+        }
+
+        // Priority 2: Et Futurum raw items / OreDictionary entries (base 2 + fortune)
+        ItemStack raw = findRawOreStack(metadata);
+        if (raw != null) {
+            int base = 2;
+            int bonus = 0;
+            if (fortune > 0) {
+                bonus = world.rand.nextInt(fortune + 2) - 1;
+                if (bonus < 0) bonus = 0;
+            }
+            int qty = base + bonus;
+            ItemStack out = raw.copy();
+            out.stackSize = qty;
+            ret.add(out);
+            return ret;
+        }
+
+        // Fallback: drop the nether ore block itself exactly once (not affected by fortune)
+        ret.add(new ItemStack(Item.getItemFromBlock(this), 1, metadata));
+        return ret;
     }
 
     public boolean removedByPlayer(World var1, EntityPlayer var2, int var3, int var4, int var5, boolean var6) {
@@ -152,7 +321,8 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     public static void angerPigmen(EntityPlayer var0, World var1, int var2, int var3, int var4) {
         if (NetherOresCore.enableAngryPigmen.getBoolean(true)) {
-            List var5 = var1.getEntitiesWithinAABB(
+            int _aggroRange = 32;
+            List<EntityPigZombie> var5 = var1.getEntitiesWithinAABB(
                 EntityPigZombie.class,
                 AxisAlignedBB.getBoundingBox(
                     var2 - _aggroRange,
@@ -162,8 +332,8 @@ public class BlockNetherOres extends Block implements INetherOre {
                     var3 + _aggroRange + 1,
                     var4 + _aggroRange + 1));
 
-            for (int var6 = 0; var6 < var5.size(); var6++) {
-                ((EntityPigZombie) var5.get(var6)).becomeAngryAt(var0);
+            for (EntityPigZombie o : var5) {
+                o.becomeAngryAt(var0);
             }
         }
     }
