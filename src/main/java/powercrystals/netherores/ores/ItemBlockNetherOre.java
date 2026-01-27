@@ -32,7 +32,7 @@ public class ItemBlockNetherOre extends ItemBlock {
             .toLowerCase(Locale.US);
     }
 
-    public void getSubItems(Item var1, CreativeTabs var2, List var3) {
+    public void getSubItems(Item var1, CreativeTabs var2, List<ItemStack> var3) {
         int var4 = this._block.getBlockIndex();
         Ores[] var5 = Ores.values();
         int var6 = 0;

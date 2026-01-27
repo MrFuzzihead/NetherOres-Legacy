@@ -87,7 +87,7 @@ public class NetherOresCore extends BaseMod {
     public static Property hellFishMaxY;
     public static Property hellFishRetrogen;
     public static Property hellFishMaxHealth;
-    public static Property enableEtFuturumCompat;
+    public static Property preferredModOrder;
     public static ConfigCategory overrideOres;
     private static Configuration config;
     @SidedProxy(
@@ -149,7 +149,7 @@ public class NetherOresCore extends BaseMod {
     public void load(FMLInitializationEvent var1) {
         WorldHandler.instance.registerFeature(new NetherOresWorldGenHandler());
         proxy.load();
-        UpdateManager.registerUpdater(new UpdateManager(this, null, "http://teamcofh.com/downloads/"));
+        UpdateManager.registerUpdater(new UpdateManager(this, null, "https://teamcofh.com/downloads/"));
     }
 
     @EventHandler
@@ -170,7 +170,7 @@ public class NetherOresCore extends BaseMod {
                 this.registerOreDictOre(
                     var5,
                     var6,
-                    (ItemStack) OreDictionary.getOres(var6)
+                    OreDictionary.getOres(var6)
                         .get(0));
             } else {
                 var6 = var5.getSmeltName();
@@ -179,7 +179,7 @@ public class NetherOresCore extends BaseMod {
                     this.registerOreDictSmelt(
                         var5,
                         var6,
-                        (ItemStack) OreDictionary.getOres(var6)
+                        OreDictionary.getOres(var6)
                             .get(0));
                 }
             }
@@ -190,7 +190,7 @@ public class NetherOresCore extends BaseMod {
                 this.registerOreDictDust(
                     var5,
                     var6,
-                    (ItemStack) OreDictionary.getOres(var6)
+                    OreDictionary.getOres(var6)
                         .get(0));
             }
 
@@ -200,7 +200,7 @@ public class NetherOresCore extends BaseMod {
                 this.registerOreDictGem(
                     var5,
                     var6,
-                    (ItemStack) OreDictionary.getOres(var6)
+                    OreDictionary.getOres(var6)
                         .get(0));
             }
         }
@@ -254,10 +254,10 @@ public class NetherOresCore extends BaseMod {
                         var7.comment = "Override the '" + var5 + "' block (registered by '" + var3.getSender() + "')";
                     }
                 } else {
-                    super._log.debug("Unknown IMC message (%s) from %s", new Object[] { var4, var3.getSender() });
+                    super._log.debug("Unknown IMC message (%s) from %s", var4, var3.getSender());
                 }
             } catch (Throwable var8) {
-                super._log.error("Bad IMC message (%s) from %s", new Object[] { var3.key, var3.getSender(), var8 });
+                super._log.error("Bad IMC message (%s) from %s", var3.key, var3.getSender(), var8);
             }
         }
     }
@@ -327,9 +327,10 @@ public class NetherOresCore extends BaseMod {
 
         hellFishRetrogen = var2.get("WorldGen.HellFish", "Retrogen", true, "Retroactively generate HellFish");
 
-        // Et Futurum compatibility: if true, attempt to use etfuturum 'rawX' items when resolving raw ore drops.
-        enableEtFuturumCompat = var2.get("compat", "EtFuturumCompat", true);
-        enableEtFuturumCompat.comment = "If true, attempt to resolve raw ores using the Et Futurum 'raw' items (rawIron, rawGold, ...). Set false to skip Et Futurum-specific lookups.";
+        // Preferred mod ordering for OreDictionary selection (comma-separated list of mod ids)
+        preferredModOrder = var2
+            .get("compat", "PreferredModOrder", "etfuturum,thermalfoundation,projred|core,thaumcraft,ic2");
+        preferredModOrder.comment = "Comma-separated list of mod ids (in order of preference) to choose from when multiple OreDictionary entries exist for an ore. Example: etfuturum,thermalfoundation,projred|core";
 
         for (Ores var6 : Ores.values()) {
             var6.loadConfig(var2);

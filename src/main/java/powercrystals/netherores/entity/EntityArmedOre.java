@@ -30,9 +30,9 @@ public class EntityArmedOre extends Entity {
     public EntityArmedOre(World var1, double var2, double var4, double var6, Block var8) {
         this(var1);
         this.setPosition(var2, var4, var6);
-        super.motionX = (double) 0.0F;
-        super.motionY = (double) 0.0F;
-        super.motionZ = (double) 0.0F;
+        super.motionX = 0.0F;
+        super.motionY = 0.0F;
+        super.motionZ = 0.0F;
         this._fuse = 80;
         super.prevPosX = var2;
         super.prevPosY = var4;
@@ -48,10 +48,6 @@ public class EntityArmedOre extends Entity {
     protected void entityInit() {}
 
     public boolean canTriggerWalking() {
-        return false;
-    }
-
-    public boolean canBeCollidedWith() {
         return false;
     }
 
