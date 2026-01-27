@@ -24,7 +24,6 @@ import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.oredict.OreDictionary;
 
-import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.registry.GameRegistry;
 import powercrystals.netherores.NetherOresCore;
 import powercrystals.netherores.entity.EntityArmedOre;
@@ -39,31 +38,117 @@ public class BlockNetherOres extends Block implements INetherOre {
     private final ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
     private static final ConcurrentMap<Integer, Optional<ItemStack>> rawCache = new ConcurrentHashMap<>();
 
+    private static ItemStack choosePreferredFromOreDict(List<ItemStack> stacks, String[] preferredMods) {
+        if (stacks == null || stacks.isEmpty()) return null;
+        for (String pref : preferredMods) {
+            if (pref == null || pref.isEmpty()) continue;
+            String prefLower = pref.toLowerCase();
+            for (ItemStack s : stacks) {
+                if (s == null || s.getItem() == null) continue;
+                try {
+                    String registryName = Item.itemRegistry.getNameForObject(s.getItem());
+                    if (registryName != null) {
+                        String modId = registryName.contains(":") ? registryName.split(":", 2)[0] : registryName;
+                        if (modId != null && (modId.equalsIgnoreCase(pref) || modId.toLowerCase()
+                            .contains(prefLower))) {
+                            return s.copy();
+                        }
+                    }
+                } catch (Throwable t) {
+                    // ignore and continue
+                }
+            }
+        }
+        ItemStack first = stacks.get(0);
+        return first == null ? null : first.copy();
+    }
+
     // Resolve raw item for a specific Ores value (no cache side effects).
     private static ItemStack resolveRawForOre(Ores ore) {
         if (ore == null) return null;
 
         String base = ore.name();
 
-        // 1) Et Futurum common names
-        try {
-            if (Loader.isModLoaded("etfuturum")) {
-                ItemStack s = GameRegistry.findItemStack("etfuturum", "raw" + base, 1);
+        // Direct IC2 lookup for Iridium shards when we know the exact registry name (no ore-dict entry).
+        if (ore == Ores.Iridium) {
+            try {
+                ItemStack s = GameRegistry.findItemStack("IC2", "itemShardIridium", 1);
                 if (s != null) return s.copy();
-            }
-        } catch (Throwable ignored) {}
-        // 2) OreDictionary fallbacks
-        try {
-            List<ItemStack> stacks = OreDictionary.getOres("raw" + base);
-            if (stacks != null && !stacks.isEmpty()) return stacks.get(0)
-                .copy();
-        } catch (Throwable ignored) {}
+                // try lowercase mod id variant
+                s = GameRegistry.findItemStack("ic2", "itemShardIridium", 1);
+                if (s != null) return s.copy();
+            } catch (Throwable ignored) {}
+        }
+
+        // No special-case direct mod lookups here; prefer items via the configurable OreDictionary preference list.
+
+        // Build an ordered list of ore-dictionary keys to try for this ore
+        List<String> keys = new ArrayList<>();
+        switch (ore) {
+            case Amber:
+                keys.add("gemAmber");
+                break;
+            case Sulfur:
+                keys.add("dustSulfur");
+                break;
+            case Saltpeter:
+                keys.add("dustSaltpeter");
+                break;
+            case Ruby:
+                keys.add("gemRuby");
+                break;
+            case Sapphire:
+                keys.add("gemSapphire");
+                break;
+            case Peridot:
+                keys.add("gemPeridot");
+                break;
+            case Nikolite:
+                keys.add("dustElectrotine");
+                break;
+            default:
+                // default raw fallback
+                keys.add("raw" + base);
+                break;
+        }
+
+        // Always also try the generic raw+base as a fallback (if not already added)
+        String rawKey = "raw" + base;
+        if (!keys.contains(rawKey)) keys.add(rawKey);
+
+        // Try each key and select a preferred mod entry if available
+        for (String key : keys) {
+            try {
+                List<ItemStack> stacks = OreDictionary.getOres(key);
+                if (stacks != null && !stacks.isEmpty()) {
+                    // Build preferred-mod list from config (comma-separated) with a sane default.
+                    String[] preferred = new String[] { "etfuturum", "thermalfoundation", "projred|core",
+                        "thaumcraft" };
+                    try {
+                        if (NetherOresCore.preferredModOrder != null) {
+                            String rawPref = NetherOresCore.preferredModOrder.getString();
+                            if (rawPref != null && !rawPref.trim()
+                                .isEmpty()) {
+                                String[] parts = rawPref.split(",");
+                                for (int i = 0; i < parts.length; i++) parts[i] = parts[i].trim();
+                                preferred = parts;
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+
+                    ItemStack chosen = choosePreferredFromOreDict(stacks, preferred);
+                    if (chosen != null) return chosen;
+                }
+            } catch (Throwable ignored) {}
+        }
 
         return null;
     }
 
     // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
     public static void prefillRawCache() {
+        // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
+
         Ores[] all = Ores.values();
         for (Ores ore : all) {
             int key = ore.getBlockIndex() * 16 + ore.getMetadata();
@@ -108,10 +193,6 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     public int damageDropped(int var1) {
         return var1;
-    }
-
-    public int quantityDropped(Random var1) {
-        return 1;
     }
 
     @Override
@@ -225,7 +306,20 @@ public class BlockNetherOres extends Block implements INetherOre {
         // Priority 2: Et Futurum raw items / OreDictionary entries (base 2 + fortune)
         ItemStack raw = findRawOreStack(metadata);
         if (raw != null) {
-            int base = 2;
+            Ores ore2 = null;
+            if (oreIndex >= 0 && oreIndex < all.length) {
+                ore2 = all[oreIndex];
+            }
+
+            int base;
+            // Special-case Nikolite: use vanilla redstone base (4-5) then double it for NetherOres
+            if (ore2 == Ores.Nikolite) {
+                int vanillaBase = 4 + world.rand.nextInt(2); // 4-5
+                base = vanillaBase * 2; // double for nether ore
+            } else {
+                base = 2;
+            }
+
             int bonus = 0;
             if (fortune > 0) {
                 bonus = world.rand.nextInt(fortune + 2) - 1;
@@ -259,7 +353,7 @@ public class BlockNetherOres extends Block implements INetherOre {
             var9 = var9 > 0 ? var1.rand.nextInt(var9) : 0;
 
             while (var9-- > 0) {
-                checkExplosionChances(this, var1, var3, var4, var5);
+                checkExplosionChances(var1, var3, var4, var5);
             }
         }
 
@@ -268,7 +362,7 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     public void breakBlock(World var1, int var2, int var3, int var4, Block var5, int var6) {
         if (this.explode.get() != Boolean.FALSE) {
-            checkExplosionChances(this, var1, var2, var3, var4);
+            checkExplosionChances(var1, var2, var3, var4);
         }
 
         if (this.willAnger.get() != Boolean.TRUE) {
@@ -292,7 +386,7 @@ public class BlockNetherOres extends Block implements INetherOre {
         this.willAnger.set(true);
         this.explode.set(true);
         if (NetherOresCore.enableExplosionChainReactions.getBoolean(true)) {
-            checkExplosionChances(this, var1, var2, var3, var4);
+            checkExplosionChances(var1, var2, var3, var4);
         }
     }
 
@@ -300,7 +394,7 @@ public class BlockNetherOres extends Block implements INetherOre {
         return var5 == ForgeDirection.UP;
     }
 
-    public static void checkExplosionChances(Block var0, World var1, int var2, int var3, int var4) {
+    public static void checkExplosionChances(World var1, int var2, int var3, int var4) {
         if (!var1.isRemote && NetherOresCore.enableExplosions.getBoolean(true)) {
             for (int var5 = -1; var5 <= 1; var5++) {
                 for (int var6 = -1; var6 <= 1; var6++) {
@@ -309,7 +403,7 @@ public class BlockNetherOres extends Block implements INetherOre {
                             int var8 = var2 + var5;
                             int var9 = var3 + var6;
                             int var10 = var4 + var7;
-                            var0 = var1.getBlock(var8, var9, var10);
+                            Block var0 = var1.getBlock(var8, var9, var10);
                             if (var0 instanceof INetherOre
                                 && var1.rand.nextInt(1000) < NetherOresCore.explosionProbability.getInt()) {
                                 EntityArmedOre var11 = new EntityArmedOre(

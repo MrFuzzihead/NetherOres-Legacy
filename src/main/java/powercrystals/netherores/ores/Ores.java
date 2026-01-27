@@ -52,8 +52,8 @@ public enum Ores {
     Saltpeter(6, 4, 2, 10, false),
     Magnesium(4, 5, 2, 8, "crushed");
 
-    private int _blockIndex;
-    private int _metadata;
+    private final int _blockIndex;
+    private final int _metadata;
     private String _primary;
     private String _secondary;
     private boolean _registeredSmelting;
@@ -69,23 +69,23 @@ public enum Ores {
     private int _pulvCount;
     private int _miningLevel;
 
-    private Ores(int var3, int var4, int var5, int var6, boolean var7) {
+    Ores(int var3, int var4, int var5, int var6, boolean var7) {
         this(var3, var4, var5, var6, var7 ? "gem" : "crystal", var7);
     }
 
-    private Ores(int var3, int var4, int var5, int var6, String var7, boolean var8) {
+    Ores(int var3, int var4, int var5, int var6, String var7, boolean var8) {
         this(var3, var4, var5, var6, var7, var7);
     }
 
-    private Ores(int var3, int var4, int var5, int var6) {
+    Ores(int var3, int var4, int var5, int var6) {
         this(var3, var4, var5, var6, null, null);
     }
 
-    private Ores(int var3, int var4, int var5, int var6, String var7) {
+    Ores(int var3, int var4, int var5, int var6, String var7) {
         this(var3, var4, var5, var6, null, var7);
     }
 
-    private Ores(int var3, int var4, int var5, int var6, String var7, String var8) {
+    Ores(int var3, int var4, int var5, int var6, String var7, String var8) {
         int var9 = this.ordinal();
         this._blockIndex = var9 / 16;
         this._metadata = var9 % 16;
@@ -240,7 +240,7 @@ public enum Ores {
         ItemStack var2 = this.getItemStack(1);
         ItemStack var3 = var1.copy();
         var3.stackSize = this._pulvCount;
-        Recipes.macerator.addRecipe(new RecipeInputItemStack(var2), null, new ItemStack[] { var3.copy() });
+        Recipes.macerator.addRecipe(new RecipeInputItemStack(var2), null, var3.copy());
     }
 
     @Strippable({ "mod:appliedenergistics2" })

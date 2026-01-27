@@ -44,7 +44,7 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
             ItemBlock.class,
             (ItemBlock) Item.getItemFromBlock(this._override),
             this,
-            new String[] { "field_150939_a" });
+            "field_150939_a");
     }
 
     public boolean isAssociatedBlock(Block var1) {
@@ -284,7 +284,7 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
         if (this.calling.get() != Boolean.TRUE) {
             this.calling.set(Boolean.TRUE);
             this._override.harvestBlock(var1, var2, var3, var4, var5, var6);
-            this.calling.set(null);
+            this.calling.remove();
         }
     }
 
@@ -294,7 +294,7 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
         } else {
             this.calling.set(Boolean.TRUE);
             int var5 = this._override.getLightValue(var1, var2, var3, var4);
-            this.calling.set(null);
+            this.calling.remove();
             return var5;
         }
     }
@@ -315,7 +315,7 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
             var9 = var9 > 0 ? var1.rand.nextInt(var9) : 0;
 
             while (var9-- > 0) {
-                BlockNetherOres.checkExplosionChances(this, var1, var3, var4, var5);
+                BlockNetherOres.checkExplosionChances(var1, var3, var4, var5);
             }
         }
 
@@ -324,7 +324,7 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
 
     public void breakBlock(World var1, int var2, int var3, int var4, Block var5, int var6) {
         if (this.explode.get() != Boolean.FALSE) {
-            BlockNetherOres.checkExplosionChances(this, var1, var2, var3, var4);
+            BlockNetherOres.checkExplosionChances(var1, var2, var3, var4);
         }
 
         if (this.willAnger.get() != Boolean.TRUE) {
@@ -348,7 +348,7 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
         this.willAnger.set(true);
         this.explode.set(true);
         if (NetherOresCore.enableExplosionChainReactions.getBoolean(true)) {
-            BlockNetherOres.checkExplosionChances(this, var1, var2, var3, var4);
+            BlockNetherOres.checkExplosionChances(var1, var2, var3, var4);
         }
     }
 
