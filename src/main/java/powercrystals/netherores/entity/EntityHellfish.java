@@ -10,6 +10,7 @@ import net.minecraft.util.MathHelper;
 import net.minecraft.world.World;
 
 import powercrystals.netherores.NetherOresCore;
+import powercrystals.netherores.mixins.early.EntitySilverfishMixin;
 import powercrystals.netherores.world.BlockHellfish;
 
 public class EntityHellfish extends EntitySilverfish {
@@ -35,13 +36,14 @@ public class EntityHellfish extends EntitySilverfish {
     }
 
     protected void updateEntityActionState() {
-        int var1 = super.allySummonCooldown;
+        EntitySilverfishMixin self = (EntitySilverfishMixin) this;
+        int var1 = self.getAllySummonCooldown();
         super.updateEntityActionState();
-        super.allySummonCooldown = var1;
+        self.setAllySummonCooldown(var1);
         if (!super.worldObj.isRemote) {
-            if (super.allySummonCooldown > 0) {
-                super.allySummonCooldown--;
-                if (super.allySummonCooldown == 0) {
+            if (self.getAllySummonCooldown() > 0) {
+                self.setAllySummonCooldown(self.getAllySummonCooldown() - 1);
+                if (self.getAllySummonCooldown() == 0) {
                     int var2 = MathHelper.floor_double(super.posX);
                     int var3 = MathHelper.floor_double(super.posY);
                     int var4 = MathHelper.floor_double(super.posZ);

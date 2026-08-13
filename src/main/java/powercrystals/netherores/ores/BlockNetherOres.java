@@ -28,6 +28,7 @@ import cpw.mods.fml.common.registry.GameRegistry;
 import powercrystals.netherores.NetherOresCore;
 import powercrystals.netherores.entity.EntityArmedOre;
 import powercrystals.netherores.gui.NOCreativeTab;
+import powercrystals.netherores.mixins.early.EntityPigZombieMixin;
 import powercrystals.netherores.world.BlockHellfish;
 
 public class BlockNetherOres extends Block implements INetherOre {
@@ -436,7 +437,7 @@ public class BlockNetherOres extends Block implements INetherOre {
                     var4 + _aggroRange + 1));
 
             for (EntityPigZombie o : var5) {
-                o.becomeAngryAt(var0);
+                ((EntityPigZombieMixin) o).becomeAngryAt(var0);
             }
         }
     }

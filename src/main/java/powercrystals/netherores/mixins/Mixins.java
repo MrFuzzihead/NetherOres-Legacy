@@ -9,12 +9,10 @@ public enum Mixins implements IMixins {
 
     // Read the Javadoc of IMixins and MixinBuilder for further information
     // You should declare all of your mixins early and late in this same enum
+    // All NetherOres mixins target vanilla Minecraft classes, so they must be
+    // applied early and are common to both client and server.
     MINECRAFT(new MixinBuilder().setPhase(Phase.EARLY)
-        .addCommonMixins("MinecraftMixin")),
-
-    NOTENOUGHITEMS(new MixinBuilder().setPhase(Phase.LATE)
-        .addClientMixins("examplemod.ExampleMixin")
-        .addRequiredMod(TargetMods.EXAMPLEMOD));
+        .addCommonMixins("EntityPigZombieMixin", "EntitySilverfishMixin", "ItemBlockMixin"));
 
     private final MixinBuilder builder;
 

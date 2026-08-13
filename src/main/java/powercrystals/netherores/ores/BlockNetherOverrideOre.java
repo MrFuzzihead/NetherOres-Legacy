@@ -13,7 +13,6 @@ import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.IIcon;
@@ -23,10 +22,10 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 
-import cpw.mods.fml.common.ObfuscationReflectionHelper;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import powercrystals.netherores.NetherOresCore;
+import powercrystals.netherores.mixins.early.ItemBlockMixin;
 import powercrystals.netherores.world.BlockHellfish;
 
 public class BlockNetherOverrideOre extends Block implements INetherOre {
@@ -40,11 +39,7 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
         super(var1.getMaterial());
         this._override = var1;
         this.setStepSound(var1.stepSound);
-        ObfuscationReflectionHelper.setPrivateValue(
-            ItemBlock.class,
-            (ItemBlock) Item.getItemFromBlock(this._override),
-            this,
-            "field_150939_a");
+        ((ItemBlockMixin) Item.getItemFromBlock(this._override)).setBlockInstance(this);
     }
 
     public boolean isAssociatedBlock(Block var1) {
