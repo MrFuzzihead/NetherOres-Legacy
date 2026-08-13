@@ -4,9 +4,9 @@
 > Scope: Replace the Access Transformer and all reflection usage with Mixins, and
 > optimize the raw-ore drop path.
 >
-> **Status:** Sections 1 and 3 are **complete** (migrated AT + reflection to Mixins,
-> and optimized the raw-ore drop path). Section 2 is analytical background. See
-> Section 4 for the remaining cleanup.
+> **Status:** **Complete.** All planned items executed — migrated AT + reflection to
+> Mixins (Section 2), optimized the raw-ore drop path (Section 3), and completed the
+> cleanup (drop-logic consolidation, removed unused boilerplate and stale files).
 
 ---
 
@@ -76,9 +76,9 @@ analog of `@Accessor` — rather than `@Shadow`.
 1. **Mixin support is currently disabled.** This was true before implementation; it is
    now **resolved** — `gradle.properties` has `usesMixins = true` and the UniMixins
    boilerplate is wired up.
-2. **`run/config/mixingasm/...` files are leftovers.** They belong to a different,
-   older 1.7.10 mixin coremod (Mixingasm) and are **not** connected to the current
-   build. They should be ignored/cleaned up, not relied on.
+2. **`run/config/mixingasm/...` files are leftovers.** They belonged to a different,
+   older 1.7.10 mixin coremod (Mixingasm) and were **not** connected to the current
+   build. **Deleted** during cleanup.
 3. **The `net/` copies at repo root are reference decompiles only.**
    `net/minecraft/entity/monster/EntityPigZombie.java` and
    `EntitySilverfish.java` are RFG srg-named decompiled sources for reference; they
@@ -123,10 +123,11 @@ public interface ItemBlockMixin {
 
 All in `BlockNetherOres.java`. Ordered roughly by impact.
 
-> **Applied:** Items 1–3 below were fixed in `BlockNetherOres.java` +
-> `NetherOresCore.java`, along with the `Ores.values()` caching (item 3 of the old
-> plan). Item 4 (drop-logic consolidation) is the only one reviewed but **not**
-> applied (separate Forge vs vanilla call paths; deferred). Items 5–6 were
+> **Applied:** All items below are now implemented. Items 1–3 were fixed in
+> `BlockNetherOres.java` + `NetherOresCore.java`, along with the `Ores.values()`
+> caching. Item 4 (drop-logic consolidation) is also **done** — a shared
+> `resolveBaseDropItem` + `fortuneBonus` now back both the vanilla
+> (`getItemDropped`/`quantityDropped*`) and Forge (`getDrops`) paths. Items 5–6 were
 > intentionally left as-is (low impact / micro).
 
 ### 1. The "negative cache" is never retained — biggest issue
@@ -210,9 +211,9 @@ priority.
    move `prefillRawCache()` to `postInit`, precompute the preferred-mod order once. —
    **DONE** (see Section 3, all sub-items executed).
 4. **Cleanup**: cache `Ores.values()`, consolidate the drop logic. —
-   **PARTIALLY DONE**: `Ores.values()` is now cached (`ALL`) on the hot path.
-   **REMAINING**: consolidate the copy-pasted drop logic between `getDrops` and
-   `getItemDropped`/`quantityDropped*` into a shared helper (see Section 3, item 4).
+   **DONE** (`Ores.values()` cached via `ALL`; drop logic consolidated into shared
+   `resolveBaseDropItem`/`fortuneBonus` helpers). Also removed the unused
+   `TargetMods.java` boilerplate and the stale `run/config/mixingasm/` leftovers.
 
 ---
 
@@ -226,10 +227,9 @@ priority.
 | `src/main/java/powercrystals/netherores/mixins/early/EntityPigZombieMixin.java` | `@Invoker("becomeAngryAt")` (new) |
 | `src/main/java/powercrystals/netherores/mixins/early/EntitySilverfishMixin.java` | `@Accessor("allySummonCooldown")` (new) |
 | `src/main/java/powercrystals/netherores/mixins/early/ItemBlockMixin.java` | `@Accessor("field_150939_a")` (new) |
-| `src/main/java/powercrystals/netherores/ores/BlockNetherOres.java` | `angerPigmen` caller (`@Invoker`), drop/raw-cache optimization |
+| `src/main/java/powercrystals/netherores/ores/BlockNetherOres.java` | `angerPigmen` caller (`@Invoker`), drop/raw-cache optimization + drop-logic consolidation |
 | `src/main/java/powercrystals/netherores/ores/BlockNetherOverrideOre.java` | `ItemBlockMixin.setBlockInstance` (was `ObfuscationReflectionHelper`) |
 | `src/main/java/powercrystals/netherores/entity/EntityHellfish.java` | `EntitySilverfishMixin` accessor (was `super.allySummonCooldown`) |
 | `src/main/java/powercrystals/netherores/NetherOresCore.java` | `prefillRawCache()` moved to `postInit`; `setPreferredModOrder` call |
-| `src/main/java/powercrystals/netherores/mixins/TargetMods.java` | Unused boilerplate placeholder (safe to delete) |
 | `net/minecraft/entity/monster/EntityPigZombie.java` | Reference decompile (not compiled) |
 | `net/minecraft/entity/monster/EntitySilverfish.java` | Reference decompile (not compiled) |

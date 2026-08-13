@@ -211,11 +211,7 @@ public class BlockNetherOres extends Block implements INetherOre {
     @Override
     public int quantityDroppedWithBonus(int fortune, Random rand) {
         int base = quantityDropped(rand);
-        if (fortune > 0) {
-            int bonus = Math.max(0, rand.nextInt(fortune + 2) - 1);
-            return base + bonus;
-        }
-        return base;
+        return base + fortuneBonus(fortune, rand);
     }
 
     private ItemStack findRawOreStack(int metadata) {
@@ -269,56 +265,62 @@ public class BlockNetherOres extends Block implements INetherOre {
         };
     }
 
-    @Override
-    public Item getItemDropped(int metadata, Random rand, int fortune) {
+    // True when the ore uses a vanilla base drop (Coal/Diamond/Emerald/Lapis/Redstone).
+    private boolean isVanillaSpecialOre(Ores ore) {
+        if (ore == null) return false;
+        return switch (ore) {
+            case Coal, Diamond, Emerald, Lapis, Redstone -> true;
+            default -> false;
+        };
+    }
+
+    // Resolves the base drop item for this ore: the special vanilla item
+    // (Coal/Diamond/Emerald/Lapis/Redstone) if applicable, otherwise the
+    // OreDictionary/raw item, or null when neither is available (callers fall back
+    // to dropping the nether ore block itself). Shared by getItemDropped and getDrops.
+    private ItemStack resolveBaseDropItem(int metadata) {
         int oreIndex = this._blockIndex * 16 + metadata;
         if (oreIndex >= 0 && oreIndex < ALL.length) {
-            Ores ore = ALL[oreIndex];
-            ItemStack vanilla = getVanillaBaseForSpecial(ore);
-            if (vanilla != null) return vanilla.getItem();
+            ItemStack vanilla = getVanillaBaseForSpecial(ALL[oreIndex]);
+            if (vanilla != null) return vanilla;
         }
-        ItemStack raw = findRawOreStack(metadata);
-        if (raw != null) return raw.getItem();
+        return findRawOreStack(metadata);
+    }
+
+    // Fortune bonus: clamped to [0, fortune] (nether ores never reduce drops).
+    private static int fortuneBonus(int fortune, Random rand) {
+        if (fortune <= 0) return 0;
+        return Math.max(0, rand.nextInt(fortune + 2) - 1);
+    }
+
+    @Override
+    public Item getItemDropped(int metadata, Random rand, int fortune) {
+        ItemStack base = resolveBaseDropItem(metadata);
+        if (base != null) return base.getItem();
         return Item.getItemFromBlock(this);
     }
 
     @Override
     public ArrayList<ItemStack> getDrops(World world, int x, int y, int z, int metadata, int fortune) {
         ArrayList<ItemStack> ret = new ArrayList<>();
-
-        // Priority 1: special vanilla-mapped ores (Coal, Diamond, Emerald, Lapis, Redstone)
         int oreIndex = this._blockIndex * 16 + metadata;
-        if (oreIndex >= 0 && oreIndex < ALL.length) {
-            Ores ore = ALL[oreIndex];
-            ItemStack vanilla = getVanillaBaseForSpecial(ore);
-            if (vanilla != null) {
-                int vanillaBase = getVanillaBaseQuantity(ore, world.rand);
-                int base = vanillaBase * 2; // 2x vanilla base
-                int bonus = fortune > 0 ? Math.max(0, world.rand.nextInt(fortune + 2) - 1) : 0;
-                int qty = base + bonus;
-                ItemStack out = vanilla.copy();
-                out.stackSize = qty;
-                ret.add(out);
-                return ret;
-            }
-        }
+        Ores ore = oreIndex >= 0 && oreIndex < ALL.length ? ALL[oreIndex] : null;
 
-        // Priority 2: Et Futurum raw items / OreDictionary entries (base 2 + fortune)
-        ItemStack raw = findRawOreStack(metadata);
-        if (raw != null) {
-            Ores ore2 = oreIndex >= 0 && oreIndex < ALL.length ? ALL[oreIndex] : null;
-
-            int base;
-            // Special-case Nikolite: use vanilla redstone base (4-5) then double it for NetherOres
-            if (ore2 == Ores.Nikolite) {
-                int vanillaBase = 4 + world.rand.nextInt(2); // 4-5
-                base = vanillaBase * 2; // double for nether ore
+        ItemStack base = resolveBaseDropItem(metadata);
+        if (base != null) {
+            int baseQty;
+            if (isVanillaSpecialOre(ore)) {
+                // Priority 1: 2x the vanilla base quantity
+                baseQty = getVanillaBaseQuantity(ore, world.rand) * 2;
+            } else if (ore == Ores.Nikolite) {
+                // Nikolite uses the vanilla redstone base (4-5) doubled
+                baseQty = (4 + world.rand.nextInt(2)) * 2;
             } else {
-                base = 2;
+                // Priority 2: Et Futurum raw items / OreDictionary entries (base 2)
+                baseQty = 2;
             }
-
-            int qty = base + (fortune > 0 ? Math.max(0, world.rand.nextInt(fortune + 2) - 1) : 0);
-            ItemStack out = raw.copy();
+            int qty = baseQty + fortuneBonus(fortune, world.rand);
+            ItemStack out = base.copy();
             out.stackSize = qty;
             ret.add(out);
             return ret;
