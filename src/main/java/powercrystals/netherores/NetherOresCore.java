@@ -138,9 +138,6 @@ public class NetherOresCore extends BaseMod {
             var5.load();
         }
 
-        // Prefill the raw-ore cache so first-break lookups are cheap at runtime
-        BlockNetherOres.prefillRawCache();
-
         EntityRegistry.registerModEntity(EntityArmedOre.class, "ArmedOre", 0, this, 80, 5, false);
         EntityRegistry.registerModEntity(EntityHellfish.class, "netherOresHellfish", 1, this, 160, 5, true);
     }
@@ -207,6 +204,11 @@ public class NetherOresCore extends BaseMod {
 
         Ores.Coal.registerPulverizing(new ItemStack(Items.coal));
         MinecraftForge.EVENT_BUS.register(this);
+
+        // Prefill the raw-ore cache now that other mods have registered their
+        // OreDictionary entries. Combined with the retained negative-cache in
+        // findRawOreStack, this makes first-break lookups cheap at runtime.
+        BlockNetherOres.prefillRawCache();
     }
 
     @EventHandler
@@ -331,6 +333,10 @@ public class NetherOresCore extends BaseMod {
         preferredModOrder = var2
             .get("compat", "PreferredModOrder", "etfuturum,thermalfoundation,projred|core,thaumcraft,ic2");
         preferredModOrder.comment = "Comma-separated list of mod ids (in order of preference) to choose from when multiple OreDictionary entries exist for an ore. Example: etfuturum,thermalfoundation,projred|core";
+
+        // Parse the preferred-mod ordering once so the ore-dict matcher does not
+        // re-parse/split the config string on every lookup.
+        BlockNetherOres.setPreferredModOrder(preferredModOrder.getString());
 
         for (Ores var6 : Ores.values()) {
             var6.loadConfig(var2);

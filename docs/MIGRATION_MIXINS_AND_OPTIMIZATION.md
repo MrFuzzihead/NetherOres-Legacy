@@ -4,8 +4,9 @@
 > Scope: Replace the Access Transformer and all reflection usage with Mixins, and
 > optimize the raw-ore drop path.
 >
-> **Status:** Analysis complete. Mixin boilerplate (enabling `usesMixins`/UniMixins + config)
-> is to be added by the maintainer; refactoring starts after that.
+> **Status:** Sections 1 and 3 are **complete** (migrated AT + reflection to Mixins,
+> and optimized the raw-ore drop path). Section 2 is analytical background. See
+> Section 4 for the remaining cleanup.
 
 ---
 
@@ -43,25 +44,38 @@ accessTransformersFile = netherores_at.cfg
 
 ## 2. Q1 — Can every AT + reflection be replaced with Mixins?
 
-**Yes.** All three can be converted to Mixins. Once converted, the entire
-`netherores_at.cfg` file and the `accessTransformersFile` line in
-`gradle.properties`, plus the single `ObfuscationReflectionHelper` call, can be
-removed.
+**Yes.** All three were converted to Mixins. The entire `netherores_at.cfg` file and
+the `accessTransformersFile` line in `gradle.properties`, plus the single
+`ObfuscationReflectionHelper` call, are now removed.
 
 ### Conversion mapping
 
+> **Implemented.** One deviation from the original plan (see note below).
+
 | # | Mixin approach |
 |---|----------------|
-| 1 | Add `@Mixin(EntityPigZombie.class)` interface, e.g. `EntityPigZombieMixin`, with `@Shadow abstract void becomeAngryAt(Entity e);`, then cast the `EntityPigZombie` from the list to that interface and call it. |
-| 2 | Add `@Mixin(EntitySilverfish.class)` interface with `@Shadow @Accessor("allySummonCooldown")` getter/setter for the field. `EntityHellfish extends EntitySilverfish`, so it can no longer read the field directly via `super` — cast `this` to the accessor interface and use the getter/setter instead. |
-| 3 | Add `@Mixin(ItemBlock.class)` interface with `@Shadow @Accessor("field_150939_a") void setBlockInstance(Block b);` (or the MCP name) and call it instead of `ObfuscationReflectionHelper`. |
+| 1 | `@Mixin(EntityPigZombie.class)` interface, `EntityPigZombieMixin`, with `@Invoker("becomeAngryAt") void becomeAngryAt(Entity e)`. `BlockNetherOres.angerPigmen` casts the `EntityPigZombie` to it and calls the method. |
+| 2 | `@Mixin(EntitySilverfish.class)` interface, `EntitySilverfishMixin`, with `@Accessor("allySummonCooldown")` getter/setter. `EntityHellfish` casts `this` to the accessor interface and uses the getter/setter (no more `super.allySummonCooldown`). |
+| 3 | `@Mixin(ItemBlock.class)` interface, `ItemBlockMixin`, with `@Accessor("field_150939_a") void setBlockInstance(Block)`. `BlockNetherOverrideOre` calls it instead of `ObfuscationReflectionHelper`. |
+
+> **How the mixins were registered:** all three are declared in
+> `Mixins.MINECRAFT` as EARLY common mixins (`addCommonMixins(...)`), since they all
+> target vanilla classes loaded early.
+
+### Note: interface-mixin validator rule (found during implementation)
+
+The Mixin annotation processor enforces a strict rule for **interface** mixins
+targeting a **class**: the interface may only contain `@Accessor` / `@Invoker`
+methods — not `@Shadow`. (Sponge's `TargetValidator.validateInterfaceMixin`
+rejects any other method with "Targetted type ... is not an interface".)
+Consequently `EntityPigZombieMixin` uses `@Invoker("becomeAngryAt")` — the method
+analog of `@Accessor` — rather than `@Shadow`.
 
 ### Caveats / prerequisites (important)
 
-1. **Mixin support is currently disabled.** `gradle.properties` has
-   `usesMixins = false`. This is a GTNH-Convention project, so setting
-   `usesMixins = true` wires up **UniMixins**. *(Mixin boilerplate to be added by
-   the maintainer before refactoring.)*
+1. **Mixin support is currently disabled.** This was true before implementation; it is
+   now **resolved** — `gradle.properties` has `usesMixins = true` and the UniMixins
+   boilerplate is wired up.
 2. **`run/config/mixingasm/...` files are leftovers.** They belong to a different,
    older 1.7.10 mixin coremod (Mixingasm) and are **not** connected to the current
    build. They should be ignored/cleaned up, not relied on.
@@ -73,9 +87,9 @@ removed.
 4. **Obfuscation is the real risk.** The AT mixes SRG and MCP names
    (`func_70835_a`/`becomeAngryAt`, `field_70843_d`/`allySummonCooldown`), which is
    the "one resolves in dev, one in obf" split to be careful with. In a 1.7.10 mixin,
-   define `@Shadow`/`@Accessor` using the **MCP name** and ensure the mixin config
-   maps members so the production (obfuscated) environment resolves to the correct
-   SRG member. This is the UniMixins workflow and the most error-prone part.
+   define the members using the **MCP name**. **This was validated during
+   implementation** — the generated refmap maps `becomeAngryAt → func_70835_c(...)`,
+   `allySummonCooldown → field_70843_d`, and `field_150939_a → field_150939_a`.
 
 ### Resulting mixin interfaces (sketch)
 
@@ -83,23 +97,23 @@ removed.
 // EntityPigZombieMixin.java
 @Mixin(EntityPigZombie.class)
 public interface EntityPigZombieMixin {
-    @Shadow
+    @Invoker("becomeAngryAt")
     void becomeAngryAt(Entity entity);
 }
 
 // EntitySilverfishMixin.java
 @Mixin(EntitySilverfish.class)
 public interface EntitySilverfishMixin {
-    @Shadow @Accessor("allySummonCooldown")
+    @Accessor("allySummonCooldown")
     int getAllySummonCooldown();
-    @Shadow @Accessor("allySummonCooldown")
+    @Accessor("allySummonCooldown")
     void setAllySummonCooldown(int value);
 }
 
 // ItemBlockMixin.java
 @Mixin(ItemBlock.class)
 public interface ItemBlockMixin {
-    @Shadow @Accessor("field_150939_a")
+    @Accessor("field_150939_a")
     void setBlockInstance(Block block);
 }
 ```
@@ -108,6 +122,12 @@ public interface ItemBlockMixin {
 ## 3. Q2 — Efficiency opportunities in the raw-ore mining path
 
 All in `BlockNetherOres.java`. Ordered roughly by impact.
+
+> **Applied:** Items 1–3 below were fixed in `BlockNetherOres.java` +
+> `NetherOresCore.java`, along with the `Ores.values()` caching (item 3 of the old
+> plan). Item 4 (drop-logic consolidation) is the only one reviewed but **not**
+> applied (separate Forge vs vanilla call paths; deferred). Items 5–6 were
+> intentionally left as-is (low impact / micro).
 
 ### 1. The "negative cache" is never retained — biggest issue
 
@@ -178,17 +198,21 @@ option. The `Optional`/boxing overhead is negligible versus the above; lowest
 priority.
 ---
 
-## 4. Suggested implementation order
+## 4. Implementation status
 
 1. **Enable UniMixins**: set `usesMixins = true` in `gradle.properties` and add the
-   mixin config/boilerplate (maintainer — in progress).
-2. **Migrate AT + reflection to mixins**: convert the 3 sites to
-   `@Accessor`/`@Shadow` interfaces; then delete `netherores_at.cfg` and the
-   `accessTransformersFile` line.
-3. **Optimize `BlockNetherOres`**: retain negative-cache results
-   (`computeIfAbsent`), move `prefillRawCache()` to `postInit`, and precompute the
-   preferred-mod order once.
-4. **Cleanup**: cache `Ores.values()`, consolidate the drop logic.
+   mixin config/boilerplate. — **DONE** (`usesMixins = true`, mixin loaders + JSON
+   configs in `src/main/resources/`).
+2. **Migrate AT + reflection to mixins**: convert the 3 sites to `@Accessor`/`@Invoker`
+   interfaces; delete `netherores_at.cfg` and the `accessTransformersFile` line. —
+   **DONE** (see Section 2).
+3. **Optimize `BlockNetherOres`**: retain negative-cache results (`computeIfAbsent`),
+   move `prefillRawCache()` to `postInit`, precompute the preferred-mod order once. —
+   **DONE** (see Section 3, all sub-items executed).
+4. **Cleanup**: cache `Ores.values()`, consolidate the drop logic. —
+   **PARTIALLY DONE**: `Ores.values()` is now cached (`ALL`) on the hot path.
+   **REMAINING**: consolidate the copy-pasted drop logic between `getDrops` and
+   `getItemDropped`/`quantityDropped*` into a shared helper (see Section 3, item 4).
 
 ---
 
@@ -196,11 +220,16 @@ priority.
 
 | Path | Role |
 |------|------|
-| `src/main/resources/META-INF/netherores_at.cfg` | AT file to eventually delete |
-| `gradle.properties` | `usesMixins`, `accessTransformersFile` settings |
-| `src/main/java/powercrystals/netherores/ores/BlockNetherOres.java` | `angerPigmen` caller, drop/raw-cache logic |
-| `src/main/java/powercrystals/netherores/ores/BlockNetherOverrideOre.java` | `ObfuscationReflectionHelper` usage |
-| `src/main/java/powercrystals/netherores/entity/EntityHellfish.java` | `super.allySummonCooldown` accesses |
-| `src/main/java/powercrystals/netherores/NetherOresCore.java` | `prefillRawCache()` timing (preInit vs postInit) |
+| `src/main/resources/META-INF/netherores_at.cfg` | **DELETED** (was the NetherOres access transformer) |
+| `gradle.properties` | `usesMixins = true`; `accessTransformersFile` commented out |
+| `src/main/java/powercrystals/netherores/mixins/Mixins.java` | Registers `EntityPigZombieMixin`, `EntitySilverfishMixin`, `ItemBlockMixin` (EARLY/common) |
+| `src/main/java/powercrystals/netherores/mixins/early/EntityPigZombieMixin.java` | `@Invoker("becomeAngryAt")` (new) |
+| `src/main/java/powercrystals/netherores/mixins/early/EntitySilverfishMixin.java` | `@Accessor("allySummonCooldown")` (new) |
+| `src/main/java/powercrystals/netherores/mixins/early/ItemBlockMixin.java` | `@Accessor("field_150939_a")` (new) |
+| `src/main/java/powercrystals/netherores/ores/BlockNetherOres.java` | `angerPigmen` caller (`@Invoker`), drop/raw-cache optimization |
+| `src/main/java/powercrystals/netherores/ores/BlockNetherOverrideOre.java` | `ItemBlockMixin.setBlockInstance` (was `ObfuscationReflectionHelper`) |
+| `src/main/java/powercrystals/netherores/entity/EntityHellfish.java` | `EntitySilverfishMixin` accessor (was `super.allySummonCooldown`) |
+| `src/main/java/powercrystals/netherores/NetherOresCore.java` | `prefillRawCache()` moved to `postInit`; `setPreferredModOrder` call |
+| `src/main/java/powercrystals/netherores/mixins/TargetMods.java` | Unused boilerplate placeholder (safe to delete) |
 | `net/minecraft/entity/monster/EntityPigZombie.java` | Reference decompile (not compiled) |
 | `net/minecraft/entity/monster/EntitySilverfish.java` | Reference decompile (not compiled) |

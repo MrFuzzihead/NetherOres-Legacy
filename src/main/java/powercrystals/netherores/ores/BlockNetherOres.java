@@ -37,13 +37,24 @@ public class BlockNetherOres extends Block implements INetherOre {
     private final IIcon[] _netherOresIcons = new IIcon[16];
     private final ThreadLocal<Boolean> explode = new ThreadLocal<>();
     private final ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
+    private static final Ores[] ALL = Ores.values();
     private static final ConcurrentMap<Integer, Optional<ItemStack>> rawCache = new ConcurrentHashMap<>();
+    private static volatile String[] preferredMods = { "etfuturum", "thermalfoundation", "projred|core", "thaumcraft" };
+    private static volatile String[] preferredModsLower;
 
-    private static ItemStack choosePreferredFromOreDict(List<ItemStack> stacks, String[] preferredMods) {
+    static {
+        preferredModsLower = new String[preferredMods.length];
+        for (int i = 0; i < preferredMods.length; i++) {
+            preferredModsLower[i] = preferredMods[i].toLowerCase();
+        }
+    }
+
+    private static ItemStack choosePreferredFromOreDict(List<ItemStack> stacks) {
         if (stacks == null || stacks.isEmpty()) return null;
-        for (String pref : preferredMods) {
+        for (int i = 0; i < preferredMods.length; i++) {
+            String pref = preferredMods[i];
             if (pref == null || pref.isEmpty()) continue;
-            String prefLower = pref.toLowerCase();
+            String prefLower = preferredModsLower[i];
             for (ItemStack s : stacks) {
                 if (s == null || s.getItem() == null) continue;
                 try {
@@ -122,22 +133,7 @@ public class BlockNetherOres extends Block implements INetherOre {
             try {
                 List<ItemStack> stacks = OreDictionary.getOres(key);
                 if (stacks != null && !stacks.isEmpty()) {
-                    // Build preferred-mod list from config (comma-separated) with a sane default.
-                    String[] preferred = new String[] { "etfuturum", "thermalfoundation", "projred|core",
-                        "thaumcraft" };
-                    try {
-                        if (NetherOresCore.preferredModOrder != null) {
-                            String rawPref = NetherOresCore.preferredModOrder.getString();
-                            if (rawPref != null && !rawPref.trim()
-                                .isEmpty()) {
-                                String[] parts = rawPref.split(",");
-                                for (int i = 0; i < parts.length; i++) parts[i] = parts[i].trim();
-                                preferred = parts;
-                            }
-                        }
-                    } catch (Throwable ignored) {}
-
-                    ItemStack chosen = choosePreferredFromOreDict(stacks, preferred);
+                    ItemStack chosen = choosePreferredFromOreDict(stacks);
                     if (chosen != null) return chosen;
                 }
             } catch (Throwable ignored) {}
@@ -150,8 +146,7 @@ public class BlockNetherOres extends Block implements INetherOre {
     public static void prefillRawCache() {
         // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
 
-        Ores[] all = Ores.values();
-        for (Ores ore : all) {
+        for (Ores ore : ALL) {
             int key = ore.getBlockIndex() * 16 + ore.getMetadata();
             // Use computeIfAbsent to populate atomically and avoid races / double-resolution.
             rawCache.computeIfAbsent(key, k -> {
@@ -162,6 +157,23 @@ public class BlockNetherOres extends Block implements INetherOre {
                 }
             });
         }
+    }
+
+    // Sets the preferred-mod ordering parsed once at config load (avoids re-parsing
+    // the comma-separated config string on every ore-dict lookup).
+    public static void setPreferredModOrder(String configValue) {
+        if (configValue == null || configValue.trim()
+            .isEmpty()) {
+            return;
+        }
+        String[] parts = configValue.split(",");
+        String[] lower = new String[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            parts[i] = parts[i].trim();
+            lower[i] = parts[i].toLowerCase();
+        }
+        preferredMods = parts;
+        preferredModsLower = lower;
     }
 
     public BlockNetherOres(int var1) {
@@ -200,10 +212,7 @@ public class BlockNetherOres extends Block implements INetherOre {
     public int quantityDroppedWithBonus(int fortune, Random rand) {
         int base = quantityDropped(rand);
         if (fortune > 0) {
-            int bonus = rand.nextInt(fortune + 2) - 1;
-            if (bonus < 0) {
-                bonus = 0;
-            }
+            int bonus = Math.max(0, rand.nextInt(fortune + 2) - 1);
             return base + bonus;
         }
         return base;
@@ -211,25 +220,21 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     private ItemStack findRawOreStack(int metadata) {
         int cacheKey = this._blockIndex * 16 + metadata;
-        // Atomically compute and possibly refresh the Optional<ItemStack>.
-        Optional<ItemStack> opt = rawCache.compute(cacheKey, (k, existing) -> {
+        // Atomically compute if absent and *always* retain the result (including
+        // empty) to avoid re-resolving on every block break when no ore-dict entry
+        // is available.
+        Optional<ItemStack> opt = rawCache.computeIfAbsent(cacheKey, k -> {
             int oreIndex = k; // same encoding used for the key
-            Ores[] all = Ores.values();
-            if (oreIndex < 0 || oreIndex >= all.length) {
+            if (oreIndex < 0 || oreIndex >= ALL.length) {
                 return Optional.empty();
             }
-            // If we already have a resolved value, keep it. If it's empty, try resolving again.
-            if (existing != null && existing.isPresent()) {
-                return existing;
-            }
-            Ores ore = all[oreIndex];
+            Ores ore = ALL[oreIndex];
             try {
                 return Optional.ofNullable(resolveRawForOre(ore));
             } catch (Throwable t) {
                 return Optional.empty();
             }
         });
-
         return opt == null ? null : opt.orElse(null);
     }
 
@@ -267,9 +272,8 @@ public class BlockNetherOres extends Block implements INetherOre {
     @Override
     public Item getItemDropped(int metadata, Random rand, int fortune) {
         int oreIndex = this._blockIndex * 16 + metadata;
-        Ores[] all = Ores.values();
-        if (oreIndex >= 0 && oreIndex < all.length) {
-            Ores ore = all[oreIndex];
+        if (oreIndex >= 0 && oreIndex < ALL.length) {
+            Ores ore = ALL[oreIndex];
             ItemStack vanilla = getVanillaBaseForSpecial(ore);
             if (vanilla != null) return vanilla.getItem();
         }
@@ -284,18 +288,13 @@ public class BlockNetherOres extends Block implements INetherOre {
 
         // Priority 1: special vanilla-mapped ores (Coal, Diamond, Emerald, Lapis, Redstone)
         int oreIndex = this._blockIndex * 16 + metadata;
-        Ores[] all = Ores.values();
-        if (oreIndex >= 0 && oreIndex < all.length) {
-            Ores ore = all[oreIndex];
+        if (oreIndex >= 0 && oreIndex < ALL.length) {
+            Ores ore = ALL[oreIndex];
             ItemStack vanilla = getVanillaBaseForSpecial(ore);
             if (vanilla != null) {
                 int vanillaBase = getVanillaBaseQuantity(ore, world.rand);
                 int base = vanillaBase * 2; // 2x vanilla base
-                int bonus = 0;
-                if (fortune > 0) {
-                    bonus = world.rand.nextInt(fortune + 2) - 1;
-                    if (bonus < 0) bonus = 0;
-                }
+                int bonus = fortune > 0 ? Math.max(0, world.rand.nextInt(fortune + 2) - 1) : 0;
                 int qty = base + bonus;
                 ItemStack out = vanilla.copy();
                 out.stackSize = qty;
@@ -307,10 +306,7 @@ public class BlockNetherOres extends Block implements INetherOre {
         // Priority 2: Et Futurum raw items / OreDictionary entries (base 2 + fortune)
         ItemStack raw = findRawOreStack(metadata);
         if (raw != null) {
-            Ores ore2 = null;
-            if (oreIndex >= 0 && oreIndex < all.length) {
-                ore2 = all[oreIndex];
-            }
+            Ores ore2 = oreIndex >= 0 && oreIndex < ALL.length ? ALL[oreIndex] : null;
 
             int base;
             // Special-case Nikolite: use vanilla redstone base (4-5) then double it for NetherOres
@@ -321,12 +317,7 @@ public class BlockNetherOres extends Block implements INetherOre {
                 base = 2;
             }
 
-            int bonus = 0;
-            if (fortune > 0) {
-                bonus = world.rand.nextInt(fortune + 2) - 1;
-                if (bonus < 0) bonus = 0;
-            }
-            int qty = base + bonus;
+            int qty = base + (fortune > 0 ? Math.max(0, world.rand.nextInt(fortune + 2) - 1) : 0);
             ItemStack out = raw.copy();
             out.stackSize = qty;
             ret.add(out);
