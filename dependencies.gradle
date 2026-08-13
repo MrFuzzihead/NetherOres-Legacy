@@ -45,5 +45,5 @@ dependencies {
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:ProjectRed:4.12.17-GTNH:dev")
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:CraftTweaker:3.4.2:dev")
     runtimeOnlyNonPublishable("thaumcraft:Thaumcraft:1.7.10-4.2.3.5:dev")
-    runtimeOnlyNonPublishable("com.github.GTNewHorizons:Baubles:1.0.4:dev")
+    runtimeOnlyNonPublishable("com.github.GTNewHorizons:Baubles-Expanded:2.2.22-GTNH:dev")
 }
