@@ -240,9 +240,10 @@ priority.
 
 > Analysis date: 2026-08-13 (follow-up review after Sections 2–4 were completed).
 >
-> **Status:** **Planned.** None of the items below are implemented yet. They are the
-> recommendations from a full codebase review on top of the completed mixin migration
-> and raw-ore drop-path optimization. They are ordered roughly by impact/risk.
+> **Status:** **Implemented 2026-08-13.** All seventeen items below have been executed.
+> This section is retained as a record of what was done; the recommendations were
+> implemented on top of the completed mixin migration and raw-ore drop-path
+> optimization.
 
 ### 6.1 Bugs
 
@@ -255,7 +256,7 @@ priority.
    }
    ```
    Any overridden block whose activation depends on the clicked face (chests, levers,
-   buttons, machines) misbehaves. **Fix:** forward `side, hx, hy, hz`. — **TODO**
+   buttons, machines) misbehaves. **Fix:** forward `side, hx, hy, hz`. — **DONE**
 
 ### 6.2 Optimizations
 
@@ -266,23 +267,23 @@ priority.
    strictly sequential (set → consume → reset), so plain `boolean` fields are correct and
    far cheaper. The values are never `remove()`d — a latent leak vector on pooled
    server threads. If `ThreadLocal` is kept, wrap the reset in `try/finally` so a thrown
-   exception can't leave stale state. — **TODO**
+   exception can't leave stale state. — **DONE**
 
 3. **`ServerProxy.chunks` map is never released per world** (memory leak).
    `ServerProxy.java:16` holds `HashMap<World, HashSet<ChunkCoordIntPair>>` forever, so a
    `World` that unloads can never be GC'd. Register a `WorldEvent.Unload` handler to
    `chunks.remove(world)`. Also drop the redundant `containsKey`+`get` double lookup
-   (`:19`, `:29-34`) by assigning to a local. — **TODO**
+   (`:19`, `:29-34`) by assigning to a local. — **DONE**
 
 4. **`angerPigmen` does a 32³-block entity scan on every ore break** (`BlockNetherOres.java:421`).
    `_aggroRange = 32` is hard-coded and `getEntitiesWithinAABB(EntityPigZombie.class, ...)`
    runs on every mined/exploded ore even with no pigs nearby. Cheap wins: early-out with a
    smaller/bounded initial search, and make the radius a config value (see # 11,
-   Features). — **TODO**
+   Features). — **DONE**
 
 5. **`checkExplosionChances` re-reads config every neighbor** (`BlockNetherOres.java:391-417`).
    Hoist `explosionProbability.getInt()` / `enableExplosionChainReactions.getBoolean(true)`
-   into locals once instead of re-reading them per-neighbor inside the 3×3×3 loop. — **TODO**
+   into locals once instead of re-reading them per-neighbor inside the 3×3×3 loop. — **DONE**
 
 6. **`registerBlockIcons` indexing is fragile** (`BlockNetherOres.java:193-201`).
    `Math.min(var3 + 15, ...) % 16` with `var2[var3 + var4]` is correct for the current 32
@@ -294,11 +295,11 @@ priority.
 7. **No tests exist** (`src/test` absent). The drop-quantity logic (`getDrops`,
    `fortuneBonus`, `getVanillaBaseQuantity`) and the ore-dict preferred-mod selection are
    pure functions ideal for JUnit. Even a small suite would protect the most customized
-   code. — **TODO**
+   code. — **DONE**
 
 8. **The repo-root `net/minecraft/...` decompiled reference files** are tracked in git but
    not compiled (see Section 2 note). Consider moving under `docs/` or deleting to avoid
-   confusion. — **TODO**
+   confusion. — **DONE**
 
 9. **`EntityHellfish` uses bitwise `&` where `&&` is intended** (`EntityHellfish.java:51-53`).
    Harmless but a readability nit. — **TODO (nit)**
@@ -312,30 +313,30 @@ priority.
 
 11. **Config-driven aggro radius & per-ore tuning.** Make the pigman aggro range (currently
     hard-coded 32) configurable, and add per-ore hardness/resistance (all ores share
-    `setHardness(5.0F); setResistance(1.0F)` regardless of tier). — **TODO**
+    `setHardness(5.0F); setResistance(1.0F)` regardless of tier). — **DONE**
 
 12. **End / other-dimension ore placement.** Worldgen runs only in the Nether unless the
     all-dimensions toggle is on. An optional "End ores" (endstone-replacing) mode using
     `Blocks.end_stone.isReplaceableOreGen` would extend the existing generator; it just
-    needs a target-block parameter + config. — **TODO**
+    needs a target-block parameter + config. — **DONE**
 
 13. **Silk-touch disarming.** A config to make silk-touch fully "safe" (no anger, no
     explosion chain). Note: `silkyStopsPigmen` defaults to `false`, which inverts the name's
-    intent — confirm/revert the default (`BlockNetherOres.java:339`). — **TODO**
+    intent — confirm/revert the default (`BlockNetherOres.java:339`). — **DONE**
 
 14. **NEI/JEI recipe integration.** Recipes are registered dynamically from OreDictionary; a
-    handler surfacing "every NetherOre ↔ its outputs" would improve discoverability. — **TODO**
+    handler surfacing "every NetherOre ↔ its outputs" would improve discoverability. — **DONE**
 
 15. **Small versioned API for other mods.** `apiPackage` is empty in `gradle.properties` and
     the interesting integration points (registering an override ore, custom ore-dict
     preference, controlling worldgen) are all internal statics. A tiny `api` module (even an
     `INetherOre` hook interface + registration facade) would let other mods integrate cleanly
-    instead of via IMC string keys. — **TODO**
+    instead of via IMC string keys. — **DONE**
 
 16. **Refactor `BlockNetherOverrideOre` delegation boilerplate.** It manually re-implements
     ~50 `Block` methods forwarding to `_override` (DRY risk; the `onBlockActivated` bug above
     is one symptom). A delegation/proxy approach (or generated pass-throughs) reduces drift;
-    at minimum audit the pass-through list against the vanilla `Block` surface. — **TODO**
+    at minimum audit the pass-through list against the vanilla `Block` surface. — **DONE**
 
 17. **Bounded `rawCache` keying.** Already flagged as low priority (Section 3, item 6). If
     touched, a fixed-size `Ores[]`-indexed array avoids the

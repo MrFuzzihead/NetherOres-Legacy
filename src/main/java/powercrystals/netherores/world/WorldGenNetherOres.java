@@ -13,11 +13,17 @@ public class WorldGenNetherOres extends WorldGenerator {
     private Block _minableBlock;
     private int _minableBlockMeta;
     private int _numberOfBlocks;
+    private final Block _genBlock;
 
     public WorldGenNetherOres(Block var1, int var2, int var3) {
-        this._minableBlock = var1;
-        this._minableBlockMeta = var2;
-        this._numberOfBlocks = var3;
+        this(var1, var2, var3, Blocks.netherrack);
+    }
+
+    public WorldGenNetherOres(Block block, int meta, int count, Block genBlock) {
+        this._minableBlock = block;
+        this._minableBlockMeta = meta;
+        this._numberOfBlocks = count;
+        this._genBlock = genBlock == null ? Blocks.netherrack : genBlock;
     }
 
     public boolean generate(World var1, Random var2, int var3, int var4, int var5) {
@@ -62,7 +68,7 @@ public class WorldGenNetherOres extends WorldGenerator {
                                 double var46 = (var45 + 0.5 - var25) / (var29 / 2.0);
                                 Block var48 = var1.getBlock(var39, var42, var45);
                                 if (var48 != null && var40 * var40 + var43 * var43 + var46 * var46 < 1.0
-                                    && var48.isReplaceableOreGen(var1, var39, var42, var45, Blocks.netherrack)) {
+                                    && var48.isReplaceableOreGen(var1, var39, var42, var45, this._genBlock)) {
                                     var1.setBlock(var39, var42, var45, this._minableBlock, this._minableBlockMeta, 2);
                                 }
                             }

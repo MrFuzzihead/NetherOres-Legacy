@@ -14,7 +14,7 @@ public class LateMixinsLoader implements ILateMixinLoader {
 
     @Override
     public String getMixinConfig() {
-        return "mixins.netherores.late.json";
+        return "mixins.NetherOres.late.json";
     }
 
     @Nonnull

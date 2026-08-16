@@ -9,11 +9,17 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 /**
  * Exposes {@link EntityPigZombie#becomeAngryAt(Entity)} so NetherOres can anger
  * pigmen without an access transformer. Cast instances to this interface and call
- * {@link #becomeAngryAt(Entity)}.
+ * {@link #invokeBecomeAngryAt(Entity)}.
+ * <p>
+ * NOTE: the invoker method name intentionally differs from the target
+ * ({@code invokeBecomeAngryAt} vs {@code becomeAngryAt}). Mixin injects a bridge
+ * into the target class named after the invoker method; if that name equals the
+ * private target it exposes, the bridge calls itself and causes infinite recursion
+ * (StackOverflowError) when invoked.
  */
 @Mixin(EntityPigZombie.class)
 public interface EntityPigZombieMixin {
 
     @Invoker("becomeAngryAt")
-    void becomeAngryAt(Entity entity);
+    void invokeBecomeAngryAt(Entity entity);
 }

@@ -3,14 +3,12 @@ package powercrystals.netherores;
 import java.io.File;
 import java.util.List;
 import java.util.Map.Entry;
-import java.util.Random;
 
 import net.minecraft.block.Block;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
-import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.ConfigCategory;
 import net.minecraftforge.common.config.Configuration;
@@ -67,9 +65,11 @@ public class NetherOresCore extends BaseMod {
     public static Property enableExplosionChainReactions;
     public static Property enableFortuneExplosions;
     public static Property enableAngryPigmen;
-    public static Property silkyStopsPigmen;
+    public static Property angryPigmenRange;
+    public static Property silkyAngersPigmen;
     public static Property enableMobsAngerPigmen;
     public static Property enableHellfish;
+    public static Property enableEndOreGen;
     public static Property enableSmeltToOres;
     public static Property enableStandardFurnaceRecipes;
     public static Property enableMaceratorRecipes;
@@ -111,25 +111,11 @@ public class NetherOresCore extends BaseMod {
         GameRegistry.registerBlock(blockHellfish, ItemBlock.class, "netherOresBlockHellfish");
         GameRegistry.registerCustomItemStack("netherOresBlockHellfish", new ItemStack(blockHellfish));
         if (enableHellQuartz.getBoolean(true)) {
-            BlockNetherOverrideOre var6 = new BlockNetherOverrideOre(Blocks.quartz_ore) {
-
-                @Override
-                public int quantityDroppedWithBonus(int var1, Random var2x) {
-                    synchronized (Blocks.class) {
-                        // Don't assign to Blocks.quartz_ore (final). Call the original block's implementation directly.
-                        return super._override.quantityDroppedWithBonus(var1, var2x);
-                    }
-                }
-
-                @Override
-                public void dropBlockAsItemWithChance(World var1, int var2x, int var3, int var4, int var5, float var6x,
-                    int var7) {
-                    synchronized (Blocks.class) {
-                        // Don't assign to Blocks.quartz_ore (final). Call the original block's implementation directly.
-                        super._override.dropBlockAsItemWithChance(var1, var2x, var3, var4, var5, var6x, var7);
-                    }
-                }
-            };
+            // Override vanilla nether quartz ore to behave like a NetherOre. The anonymous
+            // override subclass (with a pointless synchronized(Blocks.class) on the two
+            // drop methods) is unnecessary: BlockNetherOverrideOre already delegates
+            // quantityDroppedWithBonus / dropBlockAsItemWithChance to _override.
+            BlockNetherOverrideOre var6 = new BlockNetherOverrideOre(Blocks.quartz_ore);
             // Use RegistryUtils.overwriteEntry instead of assigning to Blocks.quartz_ore.
             RegistryUtils.overwriteEntry(Block.blockRegistry, "minecraft:quartz_ore", var6);
         }
@@ -284,8 +270,11 @@ public class NetherOresCore extends BaseMod {
         enableFortuneExplosions.comment = "NetherOres have a higher chance to explode when mined with fortune if true.";
         enableAngryPigmen = var2.get("general", "AngryPigmenEnable", true);
         enableAngryPigmen.comment = "If true, when NetherOres are mined, nearby pigmen become angry to the player.";
-        silkyStopsPigmen = var2.get("general", "SilkyAngryPigmenEnable", false);
-        silkyStopsPigmen.comment = "If true, when NetherOres are mined with Silk Touch, nearby pigmen become angry to the player.";
+        angryPigmenRange = var2.get("general", "AngryPigmenRange", 32)
+            .setMinValue(1);
+        angryPigmenRange.comment = "The block radius within which pigmen are angered when a NetherOre is mined.";
+        silkyAngersPigmen = var2.get("general", "SilkyAngryPigmenEnable", false);
+        silkyAngersPigmen.comment = "If true, when NetherOres are mined with Silk Touch, nearby pigmen become angry to the player (default false: silk-touch mining is safe).";
         enableMobsAngerPigmen = var2.get("general", "MobsAngerPigmen", true);
         enableMobsAngerPigmen.comment = "If true, any entity not a player exploding a NetherOre will anger nearby pigmen. This only accounts for exploding, entities breaking the blocks normally will still anger pigmen.";
         hellFishMaxHealth = var2.get("general", "HellFish.MaxHealth", 12.5, null, 8.0, Double.MAX_VALUE);
@@ -306,6 +295,9 @@ public class NetherOresCore extends BaseMod {
         forceOreSpawn.comment = "If true, will spawn nether ores regardless of if a furnace or macerator recipe was found. If false, at least one of those two must be found to spawn the ore.";
         worldGenAllDimensions = var2.get("WorldGen.Enable", "AllDimensionWorldGen", false);
         worldGenAllDimensions.comment = "If true, Nether Ores worldgen will run in all dimensions instead of just the Nether. It will still require netherrack to place ores.";
+        enableEndOreGen = var2.get("WorldGen.Enable", "EndOreWorldGen", false)
+            .setRequiresMcRestart(true);
+        enableEndOreGen.comment = "If true, Nether Ores will also generate in The End, embedded in end stone. Requires CoFHCore retrogen/chunk repopulation to take effect in already-generated chunks.";
         enableWorldGen = var2.get("WorldGen.Enable", "OreGen", true);
         enableWorldGen.comment = "If true, Nether Ores oregen will run and places ores in the world where appropriate. Only disable this if you intend to use the ores with a custom ore generator. (overrides per-ore forcing; hellfish still generate if enabled)";
         enableHellQuartz = var2.get("WorldGen.Enable", "OverrideNetherQuartz", true)

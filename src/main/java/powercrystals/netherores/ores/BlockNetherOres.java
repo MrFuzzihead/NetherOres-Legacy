@@ -2,10 +2,7 @@ package powercrystals.netherores.ores;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.texture.IIconRegister;
@@ -35,10 +32,22 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     private int _blockIndex = 0;
     private final IIcon[] _netherOresIcons = new IIcon[16];
-    private final ThreadLocal<Boolean> explode = new ThreadLocal<>();
-    private final ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
+
+    // Handed from removedByPlayer / onBlockExploded to the synchronous breakBlock call.
+    // Minecraft runs block breaks on the single world thread, so plain fields are
+    // sufficient (and cheaper than per-access ThreadLocal lookups). The defaults match
+    // the historical "unset" behavior that breakBlock relied on.
+    private boolean explode = true;
+    private boolean willAnger = false;
+
     private static final Ores[] ALL = Ores.values();
-    private static final ConcurrentMap<Integer, Optional<ItemStack>> rawCache = new ConcurrentHashMap<>();
+
+    // Raw-ore drop cache, keyed by the global ore index (blockIndex * 16 + metadata).
+    // Resolution happens on the world thread and is single-pass (prefill + on-demand),
+    // so a plain array with a resolved-flag avoids map and boxing overhead.
+    private static final ItemStack[] rawCache = new ItemStack[ALL.length];
+    private static final boolean[] rawCacheResolved = new boolean[ALL.length];
+
     private static volatile String[] preferredMods = { "etfuturum", "thermalfoundation", "projred|core", "thaumcraft" };
     private static volatile String[] preferredModsLower;
 
@@ -145,31 +154,29 @@ public class BlockNetherOres extends Block implements INetherOre {
     // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
     public static void prefillRawCache() {
         // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
-
         for (Ores ore : ALL) {
-            int key = ore.getBlockIndex() * 16 + ore.getMetadata();
-            // Use computeIfAbsent to populate atomically and avoid races / double-resolution.
-            rawCache.computeIfAbsent(key, k -> {
-                try {
-                    return Optional.ofNullable(resolveRawForOre(ore));
-                } catch (Throwable t) {
-                    return Optional.empty();
-                }
-            });
+            int index = ore.getBlockIndex() * 16 + ore.getMetadata();
+            if (index < 0 || index >= ALL.length || rawCacheResolved[index]) {
+                continue;
+            }
+            try {
+                rawCache[index] = resolveRawForOre(ore);
+            } catch (Throwable t) {
+                rawCache[index] = null;
+            }
+            rawCacheResolved[index] = true;
         }
     }
 
     // Sets the preferred-mod ordering parsed once at config load (avoids re-parsing
     // the comma-separated config string on every ore-dict lookup).
     public static void setPreferredModOrder(String configValue) {
-        if (configValue == null || configValue.trim()
-            .isEmpty()) {
+        String[] parts = DropMath.parsePreferredModOrder(configValue);
+        if (parts == null) {
             return;
         }
-        String[] parts = configValue.split(",");
         String[] lower = new String[parts.length];
         for (int i = 0; i < parts.length; i++) {
-            parts[i] = parts[i].trim();
             lower[i] = parts[i].toLowerCase();
         }
         preferredMods = parts;
@@ -190,13 +197,14 @@ public class BlockNetherOres extends Block implements INetherOre {
         return this._blockIndex;
     }
 
-    public void registerBlockIcons(IIconRegister var1) {
-        Ores[] var2 = Ores.values();
-        int var3 = this._blockIndex * 16;
-        int var4 = 0;
-
-        for (int var5 = Math.min(var3 + 15, var2.length - 1) % 16; var4 <= var5; var4++) {
-            this._netherOresIcons[var4] = var1.registerIcon("netherores:" + var2[var3 + var4].name());
+    public void registerBlockIcons(IIconRegister register) {
+        int start = this._blockIndex * 16;
+        if (start >= ALL.length) {
+            return;
+        }
+        int end = Math.min(start + 16, ALL.length);
+        for (int i = 0; start + i < end; i++) {
+            this._netherOresIcons[i] = register.registerIcon("netherores:" + ALL[start + i].name());
         }
     }
 
@@ -215,28 +223,27 @@ public class BlockNetherOres extends Block implements INetherOre {
     }
 
     private ItemStack findRawOreStack(int metadata) {
-        int cacheKey = this._blockIndex * 16 + metadata;
-        // Atomically compute if absent and *always* retain the result (including
-        // empty) to avoid re-resolving on every block break when no ore-dict entry
-        // is available.
-        Optional<ItemStack> opt = rawCache.computeIfAbsent(cacheKey, k -> {
-            int oreIndex = k; // same encoding used for the key
-            if (oreIndex < 0 || oreIndex >= ALL.length) {
-                return Optional.empty();
-            }
-            Ores ore = ALL[oreIndex];
+        int oreIndex = this._blockIndex * 16 + metadata;
+        if (oreIndex < 0 || oreIndex >= ALL.length) {
+            return null;
+        }
+        // Always retain the result (including null = "no ore-dict entry") so we never
+        // re-resolve on every block break. Plain arrays are safe here: resolution happens
+        // on the world thread and is single-pass (prefill + on-demand).
+        if (!rawCacheResolved[oreIndex]) {
             try {
-                return Optional.ofNullable(resolveRawForOre(ore));
+                rawCache[oreIndex] = resolveRawForOre(ALL[oreIndex]);
             } catch (Throwable t) {
-                return Optional.empty();
+                rawCache[oreIndex] = null;
             }
-        });
-        return opt == null ? null : opt.orElse(null);
+            rawCacheResolved[oreIndex] = true;
+        }
+        return rawCache[oreIndex];
     }
 
     // Return a vanilla Minecraft base-item for special ores (Coal, Diamond, Emerald, Lapis, Redstone).
     // Returns null for ores that shouldn't use vanilla base drops.
-    private ItemStack getVanillaBaseForSpecial(Ores ore) {
+    private static ItemStack getVanillaBaseForSpecial(Ores ore) {
         if (ore == null) return null;
         return switch (ore) {
             case Coal -> new ItemStack(Items.coal, 1, 0);
@@ -289,8 +296,7 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     // Fortune bonus: clamped to [0, fortune] (nether ores never reduce drops).
     private static int fortuneBonus(int fortune, Random rand) {
-        if (fortune <= 0) return 0;
-        return Math.max(0, rand.nextInt(fortune + 2) - 1);
+        return DropMath.fortuneBonus(fortune, rand);
     }
 
     @Override
@@ -331,56 +337,58 @@ public class BlockNetherOres extends Block implements INetherOre {
         return ret;
     }
 
-    public boolean removedByPlayer(World var1, EntityPlayer var2, int var3, int var4, int var5, boolean var6) {
-        boolean var7 = var2 == null || !EnchantmentHelper.getSilkTouchModifier(var2);
-        this.explode.set(var7);
-        this.willAnger.set(true);
-        boolean var8 = super.removedByPlayer(var1, var2, var3, var4, var5, var6);
-        if (var7 || NetherOresCore.silkyStopsPigmen.getBoolean(true)) {
-            angerPigmen(var2, var1, var3, var4, var5);
+    public boolean removedByPlayer(World world, EntityPlayer player, int x, int y, int z, boolean isHarvest) {
+        boolean notSilk = player == null || !EnchantmentHelper.getSilkTouchModifier(player);
+        this.explode = notSilk;
+        this.willAnger = true;
+        final boolean removed;
+        try {
+            removed = super.removedByPlayer(world, player, x, y, z, isHarvest);
+        } finally {
+            this.willAnger = false;
+            this.explode = true;
         }
 
-        this.willAnger.set(false);
-        this.explode.set(true);
-        if (NetherOresCore.enableFortuneExplosions.getBoolean(true)) {
-            int var9 = EnchantmentHelper.getFortuneModifier(var2);
-            var9 = var9 > 0 ? var1.rand.nextInt(var9) : 0;
+        if (notSilk || NetherOresCore.silkyAngersPigmen.getBoolean(false)) {
+            angerPigmen(player, world, x, y, z);
+        }
 
-            while (var9-- > 0) {
-                checkExplosionChances(var1, var3, var4, var5);
+        if (NetherOresCore.enableFortuneExplosions.getBoolean(true)) {
+            int fortune = EnchantmentHelper.getFortuneModifier(player);
+            fortune = fortune > 0 ? world.rand.nextInt(fortune) : 0;
+            while (fortune-- > 0) {
+                checkExplosionChances(world, x, y, z);
             }
         }
-
-        return var8;
+        return removed;
     }
 
-    public void breakBlock(World var1, int var2, int var3, int var4, Block var5, int var6) {
-        if (this.explode.get() != Boolean.FALSE) {
-            checkExplosionChances(var1, var2, var3, var4);
+    public void breakBlock(World world, int x, int y, int z, Block blockType, int metadata) {
+        if (this.explode) {
+            checkExplosionChances(world, x, y, z);
         }
 
-        if (this.willAnger.get() != Boolean.TRUE) {
-            angerPigmen(var1, var2, var3, var4);
+        if (!this.willAnger) {
+            angerPigmen(world, x, y, z);
         }
 
         if (NetherOresCore.hellFishFromOre.getBoolean(false)
-            && var1.rand.nextInt(10000) < NetherOresCore.hellFishFromOreChance.getInt()) {
-            BlockHellfish.spawnHellfish(var1, var2, var3, var4);
+            && world.rand.nextInt(10000) < NetherOresCore.hellFishFromOreChance.getInt()) {
+            BlockHellfish.spawnHellfish(world, x, y, z);
         }
 
-        super.breakBlock(var1, var2, var3, var4, var5, var6);
+        super.breakBlock(world, x, y, z, blockType, metadata);
     }
 
-    public void onBlockExploded(World var1, int var2, int var3, int var4, Explosion var5) {
-        this.explode.set(false);
-        this.willAnger.set(
-            NetherOresCore.enableMobsAngerPigmen.getBoolean(true) || var5 == null
-                || !(var5.getExplosivePlacedBy() instanceof EntityLiving));
-        super.onBlockExploded(var1, var2, var3, var4, var5);
-        this.willAnger.set(true);
-        this.explode.set(true);
+    public void onBlockExploded(World world, int x, int y, int z, Explosion explosion) {
+        this.explode = false;
+        this.willAnger = NetherOresCore.enableMobsAngerPigmen.getBoolean(true) || explosion == null
+            || !(explosion.getExplosivePlacedBy() instanceof EntityLiving);
+        super.onBlockExploded(world, x, y, z, explosion);
+        this.willAnger = true;
+        this.explode = true;
         if (NetherOresCore.enableExplosionChainReactions.getBoolean(true)) {
-            checkExplosionChances(var1, var2, var3, var4);
+            checkExplosionChances(world, x, y, z);
         }
     }
 
@@ -388,26 +396,26 @@ public class BlockNetherOres extends Block implements INetherOre {
         return var5 == ForgeDirection.UP;
     }
 
-    public static void checkExplosionChances(World var1, int var2, int var3, int var4) {
-        if (!var1.isRemote && NetherOresCore.enableExplosions.getBoolean(true)) {
-            for (int var5 = -1; var5 <= 1; var5++) {
-                for (int var6 = -1; var6 <= 1; var6++) {
-                    for (int var7 = -1; var7 <= 1; var7++) {
-                        if ((var5 | var6 | var7) != 0) {
-                            int var8 = var2 + var5;
-                            int var9 = var3 + var6;
-                            int var10 = var4 + var7;
-                            Block var0 = var1.getBlock(var8, var9, var10);
-                            if (var0 instanceof INetherOre
-                                && var1.rand.nextInt(1000) < NetherOresCore.explosionProbability.getInt()) {
-                                EntityArmedOre var11 = new EntityArmedOre(
-                                    var1,
-                                    var8 + 0.5,
-                                    var9 + 0.5,
-                                    var10 + 0.5,
-                                    var0);
-                                var1.spawnEntityInWorld(var11);
-                                var1.playSoundEffect(var2 + 0.5, var3 + 0.5, var4 + 0.5, "game.tnt.primed", 1.0F, 1.0F);
+    public static void checkExplosionChances(World world, int x, int y, int z) {
+        if (!world.isRemote && NetherOresCore.enableExplosions.getBoolean(true)) {
+            int probability = NetherOresCore.explosionProbability.getInt();
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if ((dx | dy | dz) != 0) {
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            int nz = z + dz;
+                            Block neighbor = world.getBlock(nx, ny, nz);
+                            if (neighbor instanceof INetherOre && world.rand.nextInt(1000) < probability) {
+                                EntityArmedOre armed = new EntityArmedOre(
+                                    world,
+                                    nx + 0.5,
+                                    ny + 0.5,
+                                    nz + 0.5,
+                                    neighbor);
+                                world.spawnEntityInWorld(armed);
+                                world.playSoundEffect(x + 0.5, y + 0.5, z + 0.5, "game.tnt.primed", 1.0F, 1.0F);
                             }
                         }
                     }
@@ -416,26 +424,39 @@ public class BlockNetherOres extends Block implements INetherOre {
         }
     }
 
-    public static void angerPigmen(EntityPlayer var0, World var1, int var2, int var3, int var4) {
+    public static void angerPigmen(EntityPlayer player, World world, int x, int y, int z) {
         if (NetherOresCore.enableAngryPigmen.getBoolean(true)) {
-            int _aggroRange = 32;
-            List<EntityPigZombie> var5 = var1.getEntitiesWithinAABB(
+            int range = Math.max(1, NetherOresCore.angryPigmenRange.getInt());
+            List<EntityPigZombie> pigmen = world.getEntitiesWithinAABB(
                 EntityPigZombie.class,
-                AxisAlignedBB.getBoundingBox(
-                    var2 - _aggroRange,
-                    var3 - _aggroRange,
-                    var4 - _aggroRange,
-                    var2 + _aggroRange + 1,
-                    var3 + _aggroRange + 1,
-                    var4 + _aggroRange + 1));
+                AxisAlignedBB
+                    .getBoundingBox(x - range, y - range, z - range, x + range + 1, y + range + 1, z + range + 1));
 
-            for (EntityPigZombie o : var5) {
-                ((EntityPigZombieMixin) o).becomeAngryAt(var0);
+            for (EntityPigZombie o : pigmen) {
+                ((EntityPigZombieMixin) o).invokeBecomeAngryAt(player);
             }
         }
     }
 
-    public static void angerPigmen(World var0, int var1, int var2, int var3) {
-        angerPigmen(null, var0, var1, var2, var3);
+    public static void angerPigmen(World world, int x, int y, int z) {
+        angerPigmen(null, world, x, y, z);
+    }
+
+    // Deterministic example output for a NetherOre, used by the NEI integration. Resolves
+    // only the base item (no fortune / world RNG) so it is safe to call from display code.
+    public static ItemStack getRepresentativeDrop(Ores ore) {
+        if (ore == null) {
+            return null;
+        }
+        ItemStack base = getVanillaBaseForSpecial(ore);
+        if (base != null) {
+            return base.copy();
+        }
+        ItemStack raw = resolveRawForOre(ore);
+        if (raw != null) {
+            return raw.copy();
+        }
+        Block oreBlock = NetherOresCore.getOreBlock(ore.getBlockIndex());
+        return oreBlock == null ? null : new ItemStack(Item.getItemFromBlock(oreBlock), 1, ore.getMetadata());
     }
 }

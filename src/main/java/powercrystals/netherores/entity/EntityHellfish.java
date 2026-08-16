@@ -48,9 +48,9 @@ public class EntityHellfish extends EntitySilverfish {
                     int var3 = MathHelper.floor_double(super.posY);
                     int var4 = MathHelper.floor_double(super.posZ);
 
-                    label112: for (int var5 = 0; var5 <= 5 & var5 >= -5; var5 = var5 <= 0 ? 1 - var5 : -var5) {
-                        for (int var6 = 0; var6 <= 10 & var6 >= -10; var6 = var6 <= 0 ? 1 - var6 : -var6) {
-                            for (int var7 = 0; var7 <= 10 & var7 >= -10; var7 = var7 <= 0 ? 1 - var7 : -var7) {
+                    label112: for (int var5 = 0; var5 <= 5 && var5 >= -5; var5 = var5 <= 0 ? 1 - var5 : -var5) {
+                        for (int var6 = 0; var6 <= 10 && var6 >= -10; var6 = var6 <= 0 ? 1 - var6 : -var6) {
+                            for (int var7 = 0; var7 <= 10 && var7 >= -10; var7 = var7 <= 0 ? 1 - var7 : -var7) {
                                 Block var8 = super.worldObj.getBlock(var2 + var6, var3 + var5, var4 + var7);
                                 if (var8 == NetherOresCore.blockHellfish) {
                                     if (!super.worldObj.getGameRules()

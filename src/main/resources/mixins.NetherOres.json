@@ -1,8 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8.5-GTNH",
-  "package": "powercrystals.netherores.mixins.early",
-  "refmap": "mixins.netherores.refmap.json",
+  "refmap": "mixins.NetherOres.refmap.json",
   "target": "@env(DEFAULT)",
   "compatibilityLevel": "JAVA_8"
 }
