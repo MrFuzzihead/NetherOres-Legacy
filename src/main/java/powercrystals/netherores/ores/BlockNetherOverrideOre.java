@@ -13,7 +13,6 @@ import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.IIcon;
@@ -23,28 +22,38 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 
-import cpw.mods.fml.common.ObfuscationReflectionHelper;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import powercrystals.netherores.NetherOresCore;
+import powercrystals.netherores.mixins.early.ItemBlockMixin;
 import powercrystals.netherores.world.BlockHellfish;
 
+/**
+ * A {@link Block} that transparently wraps another block ({@link #_override}) so it
+ * behaves like a "NetherOre" while preserving the original block's behavior.
+ * <p>
+ * Delegation surface: behavior members (drop methods, harvest, light, activation, color,
+ * sounds, states, collision/drops, etc.) forward to {@link #_override}; the NetherOre
+ * break/explosion/anger behavior is layered on top in {@link #removedByPlayer},
+ * {@link #breakBlock} and {@link #onBlockExploded}. When adding a forwarded method keep
+ * it in the delegating style below and remember to forward ALL arguments (see the fixed
+ * {@link #onBlockActivated}).
+ */
 public class BlockNetherOverrideOre extends Block implements INetherOre {
 
     protected Block _override;
-    private ThreadLocal<Boolean> calling = new ThreadLocal<>();
-    private ThreadLocal<Boolean> explode = new ThreadLocal<>();
-    private ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
+
+    // Single-threaded state handed between removedByPlayer / onBlockExploded and the
+    // synchronous breakBlock call (see BlockNetherOres for why plain fields are used).
+    private boolean calling = false;
+    private boolean explode = true;
+    private boolean willAnger = false;
 
     public BlockNetherOverrideOre(Block var1) {
         super(var1.getMaterial());
         this._override = var1;
         this.setStepSound(var1.stepSound);
-        ObfuscationReflectionHelper.setPrivateValue(
-            ItemBlock.class,
-            (ItemBlock) Item.getItemFromBlock(this._override),
-            this,
-            "field_150939_a");
+        ((ItemBlockMixin) Item.getItemFromBlock(this._override)).setBlockInstance(this);
     }
 
     public boolean isAssociatedBlock(Block var1) {
@@ -240,9 +249,9 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
         this._override.updateTick(var1, var2, var3, var4, var5);
     }
 
-    public boolean onBlockActivated(World var1, int var2, int var3, int var4, EntityPlayer var5, int var6, float var7,
-        float var8, float var9) {
-        return this._override.onBlockActivated(var1, var2, var3, var4, var5, 0, 0.0F, 0.0F, 0.0F);
+    public boolean onBlockActivated(World world, int x, int y, int z, EntityPlayer player, int side, float hitX,
+        float hitY, float hitZ) {
+        return this._override.onBlockActivated(world, x, y, z, player, side, hitX, hitY, hitZ);
     }
 
     public void onBlockDestroyedByExplosion(World var1, int var2, int var3, int var4, Explosion var5) {
@@ -280,75 +289,81 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
         return this._override.colorMultiplier(var1, var2, var3, var4);
     }
 
-    public void harvestBlock(World var1, EntityPlayer var2, int var3, int var4, int var5, int var6) {
-        if (this.calling.get() != Boolean.TRUE) {
-            this.calling.set(Boolean.TRUE);
-            this._override.harvestBlock(var1, var2, var3, var4, var5, var6);
-            this.calling.remove();
-        }
-    }
-
-    public int getLightValue(IBlockAccess var1, int var2, int var3, int var4) {
-        if (this.calling.get() == Boolean.TRUE) {
-            return this._override.getLightValue();
-        } else {
-            this.calling.set(Boolean.TRUE);
-            int var5 = this._override.getLightValue(var1, var2, var3, var4);
-            this.calling.remove();
-            return var5;
-        }
-    }
-
-    public boolean removedByPlayer(World var1, EntityPlayer var2, int var3, int var4, int var5, boolean var6) {
-        boolean var7 = var2 == null || !EnchantmentHelper.getSilkTouchModifier(var2);
-        this.explode.set(var7);
-        this.willAnger.set(true);
-        boolean var8 = this._override.removedByPlayer(var1, var2, var3, var4, var5, var6);
-        if (var7 || NetherOresCore.silkyStopsPigmen.getBoolean(true)) {
-            BlockNetherOres.angerPigmen(var2, var1, var3, var4, var5);
-        }
-
-        this.willAnger.set(false);
-        this.explode.set(true);
-        if (NetherOresCore.enableFortuneExplosions.getBoolean(true)) {
-            int var9 = EnchantmentHelper.getFortuneModifier(var2);
-            var9 = var9 > 0 ? var1.rand.nextInt(var9) : 0;
-
-            while (var9-- > 0) {
-                BlockNetherOres.checkExplosionChances(var1, var3, var4, var5);
+    public void harvestBlock(World world, EntityPlayer player, int x, int y, int z, int meta) {
+        if (!this.calling) {
+            this.calling = true;
+            try {
+                this._override.harvestBlock(world, player, x, y, z, meta);
+            } finally {
+                this.calling = false;
             }
         }
-
-        return var8;
     }
 
-    public void breakBlock(World var1, int var2, int var3, int var4, Block var5, int var6) {
-        if (this.explode.get() != Boolean.FALSE) {
-            BlockNetherOres.checkExplosionChances(var1, var2, var3, var4);
+    public int getLightValue(IBlockAccess world, int x, int y, int z) {
+        if (this.calling) {
+            return this._override.getLightValue();
+        }
+        this.calling = true;
+        try {
+            return this._override.getLightValue(world, x, y, z);
+        } finally {
+            this.calling = false;
+        }
+    }
+
+    public boolean removedByPlayer(World world, EntityPlayer player, int x, int y, int z, boolean isHarvest) {
+        boolean notSilk = player == null || !EnchantmentHelper.getSilkTouchModifier(player);
+        this.explode = notSilk;
+        this.willAnger = true;
+        final boolean removed;
+        try {
+            removed = this._override.removedByPlayer(world, player, x, y, z, isHarvest);
+        } finally {
+            this.willAnger = false;
+            this.explode = true;
         }
 
-        if (this.willAnger.get() != Boolean.TRUE) {
-            BlockNetherOres.angerPigmen(var1, var2, var3, var4);
+        if (notSilk || NetherOresCore.silkyAngersPigmen.getBoolean(false)) {
+            BlockNetherOres.angerPigmen(player, world, x, y, z);
+        }
+
+        if (NetherOresCore.enableFortuneExplosions.getBoolean(true)) {
+            int fortune = EnchantmentHelper.getFortuneModifier(player);
+            fortune = fortune > 0 ? world.rand.nextInt(fortune) : 0;
+            while (fortune-- > 0) {
+                BlockNetherOres.checkExplosionChances(world, x, y, z);
+            }
+        }
+        return removed;
+    }
+
+    public void breakBlock(World world, int x, int y, int z, Block blockType, int metadata) {
+        if (this.explode) {
+            BlockNetherOres.checkExplosionChances(world, x, y, z);
+        }
+
+        if (!this.willAnger) {
+            BlockNetherOres.angerPigmen(world, x, y, z);
         }
 
         if (NetherOresCore.hellFishFromOre.getBoolean(false)
-            && var1.rand.nextInt(10000) < NetherOresCore.hellFishFromOreChance.getInt()) {
-            BlockHellfish.spawnHellfish(var1, var2, var3, var4);
+            && world.rand.nextInt(10000) < NetherOresCore.hellFishFromOreChance.getInt()) {
+            BlockHellfish.spawnHellfish(world, x, y, z);
         }
 
-        this._override.breakBlock(var1, var2, var3, var4, var5, var6);
+        this._override.breakBlock(world, x, y, z, blockType, metadata);
     }
 
-    public void onBlockExploded(World var1, int var2, int var3, int var4, Explosion var5) {
-        this.explode.set(false);
-        this.willAnger.set(
-            NetherOresCore.enableMobsAngerPigmen.getBoolean(true) || var5 == null
-                || !(var5.getExplosivePlacedBy() instanceof EntityLiving));
-        this._override.onBlockExploded(var1, var2, var3, var4, var5);
-        this.willAnger.set(true);
-        this.explode.set(true);
+    public void onBlockExploded(World world, int x, int y, int z, Explosion explosion) {
+        this.explode = false;
+        this.willAnger = NetherOresCore.enableMobsAngerPigmen.getBoolean(true) || explosion == null
+            || !(explosion.getExplosivePlacedBy() instanceof EntityLiving);
+        this._override.onBlockExploded(world, x, y, z, explosion);
+        this.willAnger = true;
+        this.explode = true;
         if (NetherOresCore.enableExplosionChainReactions.getBoolean(true)) {
-            BlockNetherOres.checkExplosionChances(var1, var2, var3, var4);
+            BlockNetherOres.checkExplosionChances(world, x, y, z);
         }
     }
 

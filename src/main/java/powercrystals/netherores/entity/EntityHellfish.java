@@ -10,6 +10,7 @@ import net.minecraft.util.MathHelper;
 import net.minecraft.world.World;
 
 import powercrystals.netherores.NetherOresCore;
+import powercrystals.netherores.mixins.early.EntitySilverfishMixin;
 import powercrystals.netherores.world.BlockHellfish;
 
 public class EntityHellfish extends EntitySilverfish {
@@ -35,20 +36,21 @@ public class EntityHellfish extends EntitySilverfish {
     }
 
     protected void updateEntityActionState() {
-        int var1 = super.allySummonCooldown;
+        EntitySilverfishMixin self = (EntitySilverfishMixin) this;
+        int var1 = self.getAllySummonCooldown();
         super.updateEntityActionState();
-        super.allySummonCooldown = var1;
+        self.setAllySummonCooldown(var1);
         if (!super.worldObj.isRemote) {
-            if (super.allySummonCooldown > 0) {
-                super.allySummonCooldown--;
-                if (super.allySummonCooldown == 0) {
+            if (self.getAllySummonCooldown() > 0) {
+                self.setAllySummonCooldown(self.getAllySummonCooldown() - 1);
+                if (self.getAllySummonCooldown() == 0) {
                     int var2 = MathHelper.floor_double(super.posX);
                     int var3 = MathHelper.floor_double(super.posY);
                     int var4 = MathHelper.floor_double(super.posZ);
 
-                    label112: for (int var5 = 0; var5 <= 5 & var5 >= -5; var5 = var5 <= 0 ? 1 - var5 : -var5) {
-                        for (int var6 = 0; var6 <= 10 & var6 >= -10; var6 = var6 <= 0 ? 1 - var6 : -var6) {
-                            for (int var7 = 0; var7 <= 10 & var7 >= -10; var7 = var7 <= 0 ? 1 - var7 : -var7) {
+                    label112: for (int var5 = 0; var5 <= 5 && var5 >= -5; var5 = var5 <= 0 ? 1 - var5 : -var5) {
+                        for (int var6 = 0; var6 <= 10 && var6 >= -10; var6 = var6 <= 0 ? 1 - var6 : -var6) {
+                            for (int var7 = 0; var7 <= 10 && var7 >= -10; var7 = var7 <= 0 ? 1 - var7 : -var7) {
                                 Block var8 = super.worldObj.getBlock(var2 + var6, var3 + var5, var4 + var7);
                                 if (var8 == NetherOresCore.blockHellfish) {
                                     if (!super.worldObj.getGameRules()

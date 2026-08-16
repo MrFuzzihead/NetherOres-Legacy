@@ -8,6 +8,7 @@ import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent.Post;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent.Pre;
+import net.minecraftforge.event.world.WorldEvent;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 
@@ -15,48 +16,47 @@ public class ServerProxy {
 
     private static HashMap<World, HashSet<ChunkCoordIntPair>> chunks = new HashMap<>();
 
-    public static boolean isChunkPopulating(World var0, int var1, int var2, int var3) {
-        return chunks.containsKey(var0) && chunks.get(var0)
-            .contains(new ChunkCoordIntPair(var1 >> 4, var3 >> 4));
+    public static boolean isChunkPopulating(World world, int x, int y, int z) {
+        HashSet<ChunkCoordIntPair> populating = chunks.get(world);
+        return populating != null && populating.contains(new ChunkCoordIntPair(x >> 4, z >> 4));
     }
 
     public void load() {
         MinecraftForge.EVENT_BUS.register(this);
     }
 
+    // Drop the per-world bookkeeping when a world unloads so the World (and its chunk
+    // set) can be GC'd instead of living forever in the static map.
     @SubscribeEvent
-    public void evt(Pre var1) {
-        if (!chunks.containsKey(var1.world)) {
-            chunks.put(var1.world, new HashSet<>());
-        }
-
-        chunks.get(var1.world)
-            .add(new ChunkCoordIntPair(var1.chunkX, var1.chunkZ));
+    public void onWorldUnload(WorldEvent.Unload event) {
+        chunks.remove(event.world);
     }
 
     @SubscribeEvent
-    public void evt(Post var1) {
-        if (chunks.containsKey(var1.world)) {
-            chunks.get(var1.world)
-                .remove(new ChunkCoordIntPair(var1.chunkX, var1.chunkZ));
+    public void onPopulate(Pre event) {
+        chunks.computeIfAbsent(event.world, k -> new HashSet<>())
+            .add(new ChunkCoordIntPair(event.chunkX, event.chunkZ));
+    }
+
+    @SubscribeEvent
+    public void onPopulate(Post event) {
+        HashSet<ChunkCoordIntPair> populating = chunks.get(event.world);
+        if (populating != null) {
+            populating.remove(new ChunkCoordIntPair(event.chunkX, event.chunkZ));
         }
     }
 
     @SubscribeEvent
-    public void evt(cofh.asmhooks.event.ModPopulateChunkEvent.Pre var1) {
-        if (!chunks.containsKey(var1.world)) {
-            chunks.put(var1.world, new HashSet<>());
-        }
-
-        chunks.get(var1.world)
-            .add(new ChunkCoordIntPair(var1.chunkX, var1.chunkZ));
+    public void onModPopulate(cofh.asmhooks.event.ModPopulateChunkEvent.Pre event) {
+        chunks.computeIfAbsent(event.world, k -> new HashSet<>())
+            .add(new ChunkCoordIntPair(event.chunkX, event.chunkZ));
     }
 
     @SubscribeEvent
-    public void evt(cofh.asmhooks.event.ModPopulateChunkEvent.Post var1) {
-        if (chunks.containsKey(var1.world)) {
-            chunks.get(var1.world)
-                .remove(new ChunkCoordIntPair(var1.chunkX, var1.chunkZ));
+    public void onModPopulate(cofh.asmhooks.event.ModPopulateChunkEvent.Post event) {
+        HashSet<ChunkCoordIntPair> populating = chunks.get(event.world);
+        if (populating != null) {
+            populating.remove(new ChunkCoordIntPair(event.chunkX, event.chunkZ));
         }
     }
 }
