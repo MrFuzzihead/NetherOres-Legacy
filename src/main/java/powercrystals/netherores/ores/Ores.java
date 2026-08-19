@@ -238,9 +238,57 @@ public enum Ores {
     @Strippable({ "mod:IC2" })
     private void registerMacerator(ItemStack var1) {
         ItemStack var2 = this.getItemStack(1);
-        ItemStack var3 = var1.copy();
-        var3.stackSize = this._pulvCount;
+        ItemStack var3 = this.getIC2CrushedOutput(var1);
         Recipes.macerator.addRecipe(new RecipeInputItemStack(var2), null, var3.copy());
+    }
+
+    /**
+     * Resolves the IC2 Macerator output for this ore. Ores with a direct IC2
+     * crushed-ore product (Iron, Copper, Gold, Tin, Uranium, Silver, Lead) yield the
+     * matching IC2 {@code itemCrushedOre} stack (nether ore -> 4x crushed ore),
+     * matching the legacy CraftTweaker recipes. All other ores fall back to the
+     * generic ore-dictionary-derived output stack.
+     */
+    private ItemStack getIC2CrushedOutput(ItemStack fallback) {
+        int meta = getIC2CrushedOreMeta();
+        if (meta >= 0) {
+            ItemStack crushed = GameRegistry.findItemStack("IC2", "itemCrushedOre", this._pulvCount);
+            if (crushed != null) {
+                crushed.setItemDamage(meta);
+                return crushed;
+            }
+        }
+
+        ItemStack output = fallback.copy();
+        output.stackSize = this._pulvCount;
+        return output;
+    }
+
+    /**
+     * @return the IC2 {@code itemCrushedOre} metadata for this ore, or {@code -1}
+     *         when IC2 has no crushed-ore product for it. Mirrors the metadata
+     *         layout of IC2's {@code ItemCrushedOre}: 0 Iron, 1 Copper, 2 Gold,
+     *         3 Tin, 4 Uranium, 5 Silver, 6 Lead.
+     */
+    public int getIC2CrushedOreMeta() {
+        switch (this) {
+            case Iron:
+                return 0;
+            case Copper:
+                return 1;
+            case Gold:
+                return 2;
+            case Tin:
+                return 3;
+            case Uranium:
+                return 4;
+            case Silver:
+                return 5;
+            case Lead:
+                return 6;
+            default:
+                return -1;
+        }
     }
 
     @Strippable({ "mod:appliedenergistics2" })
