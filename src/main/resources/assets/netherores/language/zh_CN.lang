@@ -1,6 +1,6 @@
 entity.NetherOres.netherOresHellfish.name = 下界蠹虫
 
-tile.netherores.hellfish.name = 被虫蚀的下界岩
+tile.netherores.hellfish.name = 被虫蚀的地狱岩
 tile.netherores.ore.coal.name = 下界煤矿石
 tile.netherores.ore.diamond.name = 下界钻石矿石
 tile.netherores.ore.gold.name = 下界金矿石
