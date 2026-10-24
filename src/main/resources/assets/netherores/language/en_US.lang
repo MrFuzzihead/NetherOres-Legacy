@@ -1,6 +1,6 @@
 entity.NetherOres.netherOresHellfish.name = Hellfish
 
-tile.netherores.hellfish = Infested Netherrack
+tile.netherores.hellfish.name = Infested Netherrack
 tile.netherores.ore.coal.name = Nether Coal Ore
 tile.netherores.ore.diamond.name = Nether Diamond Ore
 tile.netherores.ore.gold.name = Nether Gold Ore
