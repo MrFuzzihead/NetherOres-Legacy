@@ -239,15 +239,16 @@ public class BlockNetherOres extends Block implements INetherOre {
     }
 
     /**
-     * Damage of the dropped item. Our {@link #getDrops} builds the correct stack itself,
-     * but automation mods that use the legacy {@code getItemDropped}/{@code damageDropped}
-     * pair would otherwise get the ore metadata as the item damage (e.g. "emerald" with
-     * damage 8). Fall back to the block metadata only when the ore block itself drops.
+     * Must return the block metadata. {@code Block.getDamageValue(world, x, y, z)} calls
+     * {@code damageDropped(metadata)}, and Forge's {@code BlockEvent.BreakEvent} passes
+     * that value to {@code getExpDrop()} (pick-block uses it too). Returning the drop
+     * item's damage instead made every raw/dust ore resolve as metadata 0, so Tin read
+     * as Coal and Sulfur read as Platinum. {@link #getDrops} builds the correct item
+     * stacks itself.
      */
     @Override
     public int damageDropped(int metadata) {
-        ItemStack base = resolveBaseDropItem(metadata);
-        return base != null ? base.getItemDamage() : metadata;
+        return metadata;
     }
 
     @Override
