@@ -476,6 +476,9 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
     // ---- Collision / shape / harvest ---------------------------------------------------
 
     public AxisAlignedBB getCollisionBoundingBoxFromPool(World world, int x, int y, int z) {
+        // Refresh the wrapped block's bounds: server-side collisions do not go through
+        // the render pass that usually calls setBlockBoundsBasedOnState().
+        this._override.setBlockBoundsBasedOnState(world, x, y, z);
         return this._override.getCollisionBoundingBoxFromPool(world, x, y, z);
     }
 
