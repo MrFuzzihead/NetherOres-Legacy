@@ -1,6 +1,7 @@
 # Mining / drop configuration
 
-Each NetherOre has a `Mining.Ores.<Ore>` section in `config/NetherOres.cfg`:
+Each NetherOre has a `Mining.Ores.<Ore>` section in
+`config/powercrystals/netherores/common.cfg` (the CoFH per-mod config):
 
 ```
 mining {
@@ -18,7 +19,7 @@ mining {
 
 | Key | Meaning |
 | --- | --- |
-| `DropCount` | Base items dropped by one block, before Fortune. `0` disables item drops. |
+| `DropCount` | Base items dropped by one block, before Fortune. `0` with `DropSpread=0` disables item drops. |
 | `DropSpread` | Adds a uniform random `0..(DropSpread-1)` to `DropCount` (vanilla-style ore spread). |
 | `Exp` | Minimum experience dropped per block (`0` = none). |
 | `ExpSpread` | Adds a uniform random `0..(ExpSpread-1)` to `Exp`. |
@@ -57,8 +58,9 @@ into legal stacks (max stack size of the dropped item) instead of creating overs
 `ItemStack`s.
 
 `DropCount`, `Exp` and `RequireSilkTouch` use the same key names as the historical
-NetherOres config, so values already present in an upgraded `NetherOres.cfg` are picked
-up; `DropSpread` and `ExpSpread` are new and are appended with their defaults.
+NetherOres config, so values already present in an upgraded
+`config/powercrystals/netherores/common.cfg` are picked up; `DropSpread` and
+`ExpSpread` are new and are appended with their defaults.
 
 ## Regression coverage
 
