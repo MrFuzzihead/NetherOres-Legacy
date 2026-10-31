@@ -11,7 +11,6 @@ import net.minecraft.world.World;
 
 import powercrystals.netherores.NetherOresCore;
 import powercrystals.netherores.mixins.early.EntitySilverfishMixin;
-import powercrystals.netherores.world.BlockHellfish;
 
 public class EntityHellfish extends EntitySilverfish {
 
@@ -53,17 +52,17 @@ public class EntityHellfish extends EntitySilverfish {
                             for (int var7 = 0; var7 <= 10 && var7 >= -10; var7 = var7 <= 0 ? 1 - var7 : -var7) {
                                 Block var8 = super.worldObj.getBlock(var2 + var6, var3 + var5, var4 + var7);
                                 if (var8 == NetherOresCore.blockHellfish) {
-                                    if (!super.worldObj.getGameRules()
+                                    // Respect the game rule instead of always modifying the world.
+                                    // Replacing the block already spawns its hellfish through
+                                    // BlockHellfish.breakBlock, so spawning one here as well
+                                    // would duplicate the ally.
+                                    if (super.worldObj.getGameRules()
                                         .getGameRuleBooleanValue("mobGriefing")) {
                                         super.worldObj
                                             .setBlock(var2 + var6, var3 + var5, var4 + var7, Blocks.netherrack, 0, 3);
-                                    } else {
-                                        super.worldObj.func_147480_a(var2 + var6, var3 + var5, var4 + var7, false);
-                                    }
-
-                                    BlockHellfish.spawnHellfish(super.worldObj, var2 + var6, var3 + var5, var4 + var7);
-                                    if (super.rand.nextBoolean()) {
-                                        break label112;
+                                        if (super.rand.nextBoolean()) {
+                                            break label112;
+                                        }
                                     }
                                 }
                             }

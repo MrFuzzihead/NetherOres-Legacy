@@ -17,6 +17,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.IIcon;
 import net.minecraft.world.Explosion;
+import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.oredict.OreDictionary;
@@ -34,11 +35,15 @@ public class BlockNetherOres extends Block implements INetherOre {
     private final IIcon[] _netherOresIcons = new IIcon[16];
 
     // Handed from removedByPlayer / onBlockExploded to the synchronous breakBlock call.
-    // Minecraft runs block breaks on the single world thread, so plain fields are
-    // sufficient (and cheaper than per-access ThreadLocal lookups). The defaults match
-    // the historical "unset" behavior that breakBlock relied on.
-    private boolean explode = true;
-    private boolean willAnger = false;
+    // ThreadLocal (rather than plain fields) so a nested break of this same block
+    // instance on the same world thread cannot clobber an outer break's state.
+    // An unset value means "default": explode = true, willAnger = false.
+    private final ThreadLocal<Boolean> explode = new ThreadLocal<>();
+    private final ThreadLocal<Boolean> willAnger = new ThreadLocal<>();
+
+    // Fallback RNG for getExpDrop when the IBlockAccess is not a World (vanilla uses a
+    // bare Random here too).
+    private static final Random XP_RAND = new Random();
 
     private static final Ores[] ALL = Ores.values();
 
@@ -153,7 +158,6 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
     public static void prefillRawCache() {
-        // Prefill the raw item cache for all known Ores to avoid first-hit overhead at runtime.
         for (Ores ore : ALL) {
             int index = ore.getBlockIndex() * 16 + ore.getMetadata();
             if (index < 0 || index >= ALL.length || rawCacheResolved[index]) {
@@ -165,6 +169,26 @@ public class BlockNetherOres extends Block implements INetherOre {
                 rawCache[index] = null;
             }
             rawCacheResolved[index] = true;
+        }
+    }
+
+    /**
+     * Re-opens cache entries that previously resolved to "no item". Another mod may
+     * register its OreDictionary entry after our postInit prefill (or after an earlier
+     * negative lookup), and a stale negative cache would hide that item forever.
+     */
+    public static void invalidateUnresolvedRawCache() {
+        for (int i = 0; i < rawCache.length; i++) {
+            if (rawCache[i] == null) {
+                rawCacheResolved[i] = false;
+            }
+        }
+    }
+
+    private static void clearRawCache() {
+        for (int i = 0; i < rawCache.length; i++) {
+            rawCache[i] = null;
+            rawCacheResolved[i] = false;
         }
     }
 
@@ -181,6 +205,8 @@ public class BlockNetherOres extends Block implements INetherOre {
         }
         preferredMods = parts;
         preferredModsLower = lower;
+        // Cached stacks were chosen with the old preference list; re-resolve on demand.
+        clearRawCache();
     }
 
     public BlockNetherOres(int var1) {
@@ -212,14 +238,38 @@ public class BlockNetherOres extends Block implements INetherOre {
         return this._netherOresIcons[var2];
     }
 
-    public int damageDropped(int var1) {
-        return var1;
+    /**
+     * Damage of the dropped item. Our {@link #getDrops} builds the correct stack itself,
+     * but automation mods that use the legacy {@code getItemDropped}/{@code damageDropped}
+     * pair would otherwise get the ore metadata as the item damage (e.g. "emerald" with
+     * damage 8). Fall back to the block metadata only when the ore block itself drops.
+     */
+    @Override
+    public int damageDropped(int metadata) {
+        ItemStack base = resolveBaseDropItem(metadata);
+        return base != null ? base.getItemDamage() : metadata;
     }
 
     @Override
     public int quantityDroppedWithBonus(int fortune, Random rand) {
         int base = quantityDropped(rand);
         return base + fortuneBonus(fortune, rand);
+    }
+
+    @Override
+    public int quantityDropped(int metadata, int fortune, Random rand) {
+        Ores ore = oreAt(this._blockIndex, metadata);
+        // When no item resolves, getDrops falls back to a single ore block; keep the
+        // legacy quantity API consistent with that.
+        if (ore == null || resolveBaseDropItem(metadata) == null) {
+            return 1;
+        }
+        return DropMath.dropQuantity(ore.getDropCount(), ore.getDropSpread(), fortune, rand);
+    }
+
+    private static Ores oreAt(int blockIndex, int metadata) {
+        int oreIndex = blockIndex * 16 + metadata;
+        return oreIndex >= 0 && oreIndex < ALL.length ? ALL[oreIndex] : null;
     }
 
     private ItemStack findRawOreStack(int metadata) {
@@ -257,40 +307,14 @@ public class BlockNetherOres extends Block implements INetherOre {
         };
     }
 
-    // Get vanilla base quantity (without fortune) for special ores. Used to compute 2x base.
-    private int getVanillaBaseQuantity(Ores ore, Random rand) {
-        if (ore == null) return 0;
-        return switch (ore) {
-            case Coal, Diamond, Emerald -> 1; // vanilla yields 1
-            case Lapis ->
-                // vanilla lapis drops 4-8 (4 + rand.nextInt(5))
-                4 + rand.nextInt(5);
-            case Redstone ->
-                // vanilla redstone drops 4-5 (4 + rand.nextInt(2))
-                4 + rand.nextInt(2);
-            default -> 0;
-        };
-    }
-
-    // True when the ore uses a vanilla base drop (Coal/Diamond/Emerald/Lapis/Redstone).
-    private boolean isVanillaSpecialOre(Ores ore) {
-        if (ore == null) return false;
-        return switch (ore) {
-            case Coal, Diamond, Emerald, Lapis, Redstone -> true;
-            default -> false;
-        };
-    }
-
     // Resolves the base drop item for this ore: the special vanilla item
     // (Coal/Diamond/Emerald/Lapis/Redstone) if applicable, otherwise the
     // OreDictionary/raw item, or null when neither is available (callers fall back
     // to dropping the nether ore block itself). Shared by getItemDropped and getDrops.
     private ItemStack resolveBaseDropItem(int metadata) {
-        int oreIndex = this._blockIndex * 16 + metadata;
-        if (oreIndex >= 0 && oreIndex < ALL.length) {
-            ItemStack vanilla = getVanillaBaseForSpecial(ALL[oreIndex]);
-            if (vanilla != null) return vanilla;
-        }
+        Ores ore = oreAt(this._blockIndex, metadata);
+        ItemStack vanilla = getVanillaBaseForSpecial(ore);
+        if (vanilla != null) return vanilla;
         return findRawOreStack(metadata);
     }
 
@@ -309,44 +333,61 @@ public class BlockNetherOres extends Block implements INetherOre {
     @Override
     public ArrayList<ItemStack> getDrops(World world, int x, int y, int z, int metadata, int fortune) {
         ArrayList<ItemStack> ret = new ArrayList<>();
-        int oreIndex = this._blockIndex * 16 + metadata;
-        Ores ore = oreIndex >= 0 && oreIndex < ALL.length ? ALL[oreIndex] : null;
+        Ores ore = oreAt(this._blockIndex, metadata);
 
         ItemStack base = resolveBaseDropItem(metadata);
         if (base != null) {
-            int baseQty;
-            if (isVanillaSpecialOre(ore)) {
-                // Priority 1: 2x the vanilla base quantity
-                baseQty = getVanillaBaseQuantity(ore, world.rand) * 2;
-            } else if (ore == Ores.Nikolite) {
-                // Nikolite uses the vanilla redstone base (4-5) doubled
-                baseQty = (4 + world.rand.nextInt(2)) * 2;
-            } else {
-                // Priority 2: Et Futurum raw items / OreDictionary entries (base 2)
-                baseQty = 2;
+            int qty = ore != null ? DropMath.dropQuantity(ore.getDropCount(), ore.getDropSpread(), fortune, world.rand)
+                : 1 + fortuneBonus(fortune, world.rand);
+            // A large DropCount must not produce an oversized ItemStack; split it into
+            // legal stacks just like a chest full of drops would.
+            int maxStack = Math.max(1, base.getMaxStackSize());
+            while (qty > 0) {
+                ItemStack out = base.copy();
+                out.stackSize = Math.min(qty, maxStack);
+                ret.add(out);
+                qty -= out.stackSize;
             }
-            int qty = baseQty + fortuneBonus(fortune, world.rand);
-            ItemStack out = base.copy();
-            out.stackSize = qty;
-            ret.add(out);
             return ret;
         }
 
-        // Fallback: drop the nether ore block itself exactly once (not affected by fortune)
+        // Fallback: no item could be resolved for this ore, so drop the nether ore
+        // block itself exactly once (not affected by fortune or DropCount).
         ret.add(new ItemStack(Item.getItemFromBlock(this), 1, metadata));
         return ret;
     }
 
+    /**
+     * Silk Touch only returns the ore block when the ore opts in via
+     * {@code Mining.Ores.<Ore>.RequireSilkTouch}. With the setting disabled, vanilla's
+     * silk branch is bypassed and the configured item drops are produced instead.
+     */
+    @Override
+    public boolean canSilkHarvest(World world, EntityPlayer player, int x, int y, int z, int metadata) {
+        Ores ore = oreAt(this._blockIndex, metadata);
+        return ore == null || DropMath.allowsSilkHarvest(ore.isSilkTouchRequired());
+    }
+
+    @Override
+    public int getExpDrop(IBlockAccess world, int metadata, int fortune) {
+        Ores ore = oreAt(this._blockIndex, metadata);
+        if (ore == null) {
+            return 0;
+        }
+        Random rand = world instanceof World ? ((World) world).rand : XP_RAND;
+        return DropMath.experience(ore.getExp(), ore.getExpSpread(), rand);
+    }
+
     public boolean removedByPlayer(World world, EntityPlayer player, int x, int y, int z, boolean isHarvest) {
         boolean notSilk = player == null || !EnchantmentHelper.getSilkTouchModifier(player);
-        this.explode = notSilk;
-        this.willAnger = true;
+        this.explode.set(notSilk);
+        this.willAnger.set(Boolean.TRUE);
         final boolean removed;
         try {
             removed = super.removedByPlayer(world, player, x, y, z, isHarvest);
         } finally {
-            this.willAnger = false;
-            this.explode = true;
+            this.willAnger.remove();
+            this.explode.remove();
         }
 
         if (notSilk || NetherOresCore.silkyAngersPigmen.getBoolean(false)) {
@@ -364,11 +405,11 @@ public class BlockNetherOres extends Block implements INetherOre {
     }
 
     public void breakBlock(World world, int x, int y, int z, Block blockType, int metadata) {
-        if (this.explode) {
+        if (this.explode.get() != Boolean.FALSE) {
             checkExplosionChances(world, x, y, z);
         }
 
-        if (!this.willAnger) {
+        if (this.willAnger.get() != Boolean.TRUE) {
             angerPigmen(world, x, y, z);
         }
 
@@ -381,12 +422,16 @@ public class BlockNetherOres extends Block implements INetherOre {
     }
 
     public void onBlockExploded(World world, int x, int y, int z, Explosion explosion) {
-        this.explode = false;
-        this.willAnger = NetherOresCore.enableMobsAngerPigmen.getBoolean(true) || explosion == null
-            || !(explosion.getExplosivePlacedBy() instanceof EntityLiving);
-        super.onBlockExploded(world, x, y, z, explosion);
-        this.willAnger = true;
-        this.explode = true;
+        this.explode.set(Boolean.FALSE);
+        this.willAnger.set(
+            NetherOresCore.enableMobsAngerPigmen.getBoolean(true) || explosion == null
+                || !(explosion.getExplosivePlacedBy() instanceof EntityLiving));
+        try {
+            super.onBlockExploded(world, x, y, z, explosion);
+        } finally {
+            this.willAnger.remove();
+            this.explode.remove();
+        }
         if (NetherOresCore.enableExplosionChainReactions.getBoolean(true)) {
             checkExplosionChances(world, x, y, z);
         }
@@ -398,6 +443,8 @@ public class BlockNetherOres extends Block implements INetherOre {
 
     public static void checkExplosionChances(World world, int x, int y, int z) {
         if (!world.isRemote && NetherOresCore.enableExplosions.getBoolean(true)) {
+            // Hoisted out of the 26-neighbor loop: Property#getInt parses the config
+            // string on every call, and this runs on every single ore break.
             int probability = NetherOresCore.explosionProbability.getInt();
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dy = -1; dy <= 1; dy++) {

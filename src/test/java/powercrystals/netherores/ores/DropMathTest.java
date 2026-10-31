@@ -2,7 +2,9 @@ package powercrystals.netherores.ores;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Random;
@@ -42,9 +44,9 @@ public class DropMathTest {
 
     @Test
     public void parsePreferredModOrder_returnsNullForBlankInput() {
-        assertEquals(null, DropMath.parsePreferredModOrder(""));
-        assertEquals(null, DropMath.parsePreferredModOrder("   "));
-        assertEquals(null, DropMath.parsePreferredModOrder(null));
+        assertNull(DropMath.parsePreferredModOrder(""));
+        assertNull(DropMath.parsePreferredModOrder("   "));
+        assertNull(DropMath.parsePreferredModOrder(null));
     }
 
     @Test
@@ -54,5 +56,67 @@ public class DropMathTest {
         assertArrayEquals(new String[] { "ProjRed|Core", "IC2" }, parsed);
         // Callers (setPreferredModOrder) lowercase before matching.
         assertEquals("projred|core", parsed[0].toLowerCase());
+    }
+
+    @Test
+    public void baseQuantity_withoutSpreadIsExact() {
+        for (int count = 0; count <= 64; count++) {
+            assertEquals(count, DropMath.baseQuantity(count, 0, new Random(count)));
+        }
+    }
+
+    @Test
+    public void baseQuantity_negativeCountClampsToZero() {
+        assertEquals(0, DropMath.baseQuantity(-5, 0, new Random(1)));
+        for (int seed = 0; seed < 100; seed++) {
+            int qty = DropMath.baseQuantity(-5, 5, new Random(seed));
+            assertTrue("qty=" + qty, qty >= 0 && qty <= 4);
+        }
+    }
+
+    @Test
+    public void baseQuantity_spreadStaysWithinConfiguredBounds() {
+        Random rng = new Random(7);
+        for (int i = 0; i < 5000; i++) {
+            int qty = DropMath.baseQuantity(8, 9, rng);
+            assertTrue("qty=" + qty, qty >= 8 && qty <= 16);
+        }
+    }
+
+    @Test
+    public void dropQuantity_addsFortuneBonusOnTopOfBase() {
+        // With spread 0 the base is deterministic and the only variance is Fortune.
+        for (int fortune = 0; fortune <= 5; fortune++) {
+            for (int seed = 0; seed < 200; seed++) {
+                int qty = DropMath.dropQuantity(2, 0, fortune, new Random(seed));
+                assertTrue("fortune=" + fortune + " qty=" + qty, qty >= 2 && qty <= 2 + fortune);
+            }
+        }
+        assertEquals(0, DropMath.dropQuantity(0, 0, 0, new Random(1)));
+        assertEquals("disabled ore must ignore Fortune", 0, DropMath.dropQuantity(0, 0, 5, new Random(1)));
+    }
+
+    @Test
+    public void allowsSilkHarvest_followsConfigFlag() {
+        assertTrue(DropMath.allowsSilkHarvest(true));
+        assertFalse(DropMath.allowsSilkHarvest(false));
+    }
+
+    @Test
+    public void experience_matchesBaseQuantityContract() {
+        for (int exp = 0; exp <= 6; exp++) {
+            for (int spread = 0; spread <= 9; spread++) {
+                for (int seed = 0; seed < 20; seed++) {
+                    int xp = DropMath.experience(exp, spread, new Random(seed));
+                    assertEquals(DropMath.baseQuantity(exp, spread, new Random(seed)), xp);
+                    assertTrue("xp=" + xp, xp >= exp && xp < exp + Math.max(1, spread));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void experience_zeroIsZero() {
+        assertEquals(0, DropMath.experience(0, 0, new Random(1)));
     }
 }

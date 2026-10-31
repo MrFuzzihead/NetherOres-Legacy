@@ -222,6 +222,11 @@ public class NetherOresCore extends BaseMod {
     }
 
     private boolean isBlockInvalid(Block var1) {
+        // getBlockFromName returns null for blocks from mods that are not installed; a
+        // stale Overrides entry must not crash loadComplete.
+        if (var1 == null) {
+            return true;
+        }
         return Block.getIdFromBlock(var1) <= 175;
     }
 
@@ -237,6 +242,13 @@ public class NetherOresCore extends BaseMod {
                     }
 
                     Property var7 = overrideOres.get(var5);
+                    if (var7 == null) {
+                        // IMC asks for a block that is not in the user's config yet; create
+                        // the property instead of dereferencing null and silently dropping
+                        // the registration in the catch below.
+                        var7 = new Property(var5, "true", Property.Type.BOOLEAN);
+                        overrideOres.put(var5, var7);
+                    }
                     var7.getBoolean(true);
                     if (!var7.wasRead()) {
                         var7.comment = "Override the '" + var5 + "' block (registered by '" + var3.getSender() + "')";
@@ -346,6 +358,9 @@ public class NetherOresCore extends BaseMod {
     }
 
     private void registerOreDictionaryEntry(String var1, ItemStack var2) {
+        // Late OreDictionary registrations must be able to replace a negative raw-item
+        // cache entry (see BlockNetherOres#invalidateUnresolvedRawCache).
+        BlockNetherOres.invalidateUnresolvedRawCache();
         for (Ores var6 : Ores.values()) {
             if (enableSmeltToOres.getBoolean(true)) {
                 this.registerOreDictOre(var6, var1, var2);

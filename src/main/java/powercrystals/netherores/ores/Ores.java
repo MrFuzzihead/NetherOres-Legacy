@@ -68,6 +68,11 @@ public enum Ores {
     private int _smeltCount;
     private int _pulvCount;
     private int _miningLevel;
+    private int _dropCount;
+    private int _dropSpread;
+    private int _exp;
+    private int _expSpread;
+    private boolean _requireSilkTouch;
 
     Ores(int var3, int var4, int var5, int var6, boolean var7) {
         this(var3, var4, var5, var6, var7 ? "gem" : "crystal", var7);
@@ -96,6 +101,102 @@ public enum Ores {
         this._miningLevel = 2;
         this._primary = var7 != null ? var7 : "ingot";
         this._secondary = var8 != null ? var8 : "crystalline";
+        // Drop defaults reproduce the historical hardcoded output exactly:
+        // raw/vanilla ores dropped two items, while the vanilla-style random ores
+        // (Lapis/Redstone/Nikolite) kept their spread.
+        this._dropCount = defaultDropCount(this);
+        this._dropSpread = defaultDropSpread(this);
+        this._exp = defaultExp(this);
+        this._expSpread = defaultExpSpread(this);
+        this._requireSilkTouch = true;
+    }
+
+    /**
+     * Default base drop count for an ore, matching the pre-config hardcoded behavior
+     * (the classic NetherOres double drop, with the vanilla-style ore ranges).
+     */
+    static int defaultDropCount(Ores ore) {
+        // Resolved by name, not by comparing enum constants: during Ores' own class
+        // initialisation the constants that come later in the declaration order are
+        // still null, and an enum switch would initialise the synthetic $SwitchMap
+        // class while Ores itself is mid-initialisation.
+        String name = ore.name();
+        if (name.equals("Lapis") || name.equals("Redstone") || name.equals("Nikolite")) {
+            return 8;
+        }
+        return 2;
+    }
+
+    /**
+     * Default random spread for an ore. Together with {@link #defaultDropCount} this
+     * reproduces the old hardcoded ranges: Lapis 8-16, Redstone/Nikolite 8-10.
+     */
+    static int defaultDropSpread(Ores ore) {
+        String name = ore.name();
+        if (name.equals("Lapis")) {
+            return 9;
+        }
+        if (name.equals("Redstone") || name.equals("Nikolite")) {
+            return 3;
+        }
+        return 0;
+    }
+
+    /**
+     * Default minimum experience for an ore: twice the lower bound of the vanilla XP
+     * range (coal 0-2, diamond/emerald 3-7, lapis 2-5, redstone 1-5). Dust-style ores
+     * follow redstone; gem-style ores follow emerald; metal-style ores follow modern
+     * iron/gold/copper ore, which drop no experience.
+     */
+    static int defaultExp(Ores ore) {
+        switch (ore.name()) {
+            case "Coal":
+                return 0;
+            case "Lapis":
+                return 4;
+            case "Redstone":
+            case "Nikolite":
+            case "Sulfur":
+            case "Saltpeter":
+            case "Salt":
+                return 2;
+            case "Diamond":
+            case "Emerald":
+            case "Ruby":
+            case "Peridot":
+            case "Sapphire":
+            case "Amber":
+                return 6;
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Default XP spread: together with {@link #defaultExp} this doubles the vanilla ore
+     * XP range (0-2, 3-7, 2-5, 1-5 become 0-4, 6-14, 4-10, 2-10).
+     */
+    static int defaultExpSpread(Ores ore) {
+        switch (ore.name()) {
+            case "Coal":
+                return 5;
+            case "Lapis":
+                return 7;
+            case "Redstone":
+            case "Nikolite":
+            case "Sulfur":
+            case "Saltpeter":
+            case "Salt":
+            case "Diamond":
+            case "Emerald":
+            case "Ruby":
+            case "Peridot":
+            case "Sapphire":
+            case "Amber":
+                return 9;
+            default:
+                return 0;
+        }
     }
 
     public int getBlockIndex() {
@@ -164,6 +265,34 @@ public enum Ores {
 
     public int getMaceCount() {
         return this._pulvCount;
+    }
+
+    /** Configured base item count dropped by one block ({@code Mining.Ores.<Ore>.DropCount}). */
+    public int getDropCount() {
+        return this._dropCount;
+    }
+
+    /** Configured random spread added to {@link #getDropCount()} ({@code DropSpread}). */
+    public int getDropSpread() {
+        return this._dropSpread;
+    }
+
+    /** Configured experience dropped by one block ({@code Mining.Ores.<Ore>.Exp}). */
+    public int getExp() {
+        return this._exp;
+    }
+
+    /** Configured random spread added to {@link #getExp()} ({@code ExpSpread}). */
+    public int getExpSpread() {
+        return this._expSpread;
+    }
+
+    /**
+     * Whether Silk Touch is required to obtain this ore in block form. When false, Silk
+     * Touch is treated as a normal break and yields the configured item drops instead.
+     */
+    public boolean isSilkTouchRequired() {
+        return this._requireSilkTouch;
     }
 
     public ItemStack getItemStack(int var1) {
@@ -347,6 +476,7 @@ public enum Ores {
             .getBoolean(true);
         var2 = "Processing.Ores." + this.name();
         this._smeltCount = var1.get(var2, "SmeltedCount", this._smeltCount, "Output from smelting " + this.name())
+            .setMinValue(1)
             .setRequiresMcRestart(true)
             .getInt();
         this._primary = var1
@@ -364,6 +494,7 @@ public enum Ores {
             .setRequiresMcRestart(true)
             .getString();
         this._pulvCount = var1.get(var2, "PulverizedCount", this._pulvCount, "Output from grinding " + this.name())
+            .setMinValue(1)
             .setRequiresMcRestart(true)
             .getInt();
         this._secondary = var1
@@ -375,6 +506,51 @@ public enum Ores {
                     .name() + " if dust" + this.name() + " is not found (i.e., " + this._secondary + this.name() + ")")
             .setRequiresMcRestart(true)
             .getString();
+
+        var2 = "Mining.Ores." + this.name();
+        this._dropCount = var1.get(
+            var2,
+            "DropCount",
+            this._dropCount,
+            "Base number of " + this.name()
+                + " dropped before Fortune. The default mirrors the mod's classic output; set to 1 for a single drop or 0 for none.")
+            .setMinValue(0)
+            .setRequiresMcRestart(true)
+            .getInt();
+        this._dropSpread = var1.get(
+            var2,
+            "DropSpread",
+            this._dropSpread,
+            "Adds a uniform random 0..(DropSpread-1) to DropCount for a vanilla-style ore range. The defaults preserve the classic Lapis/Redstone/Nikolite spread.")
+            .setMinValue(0)
+            .setRequiresMcRestart(true)
+            .getInt();
+        this._exp = var1.get(
+            var2,
+            "Exp",
+            this._exp,
+            "Minimum experience dropped when mining " + this.name()
+                + ". Defaults double the vanilla ore XP range (metal-style ores follow modern iron/gold/copper and drop none).")
+            .setMinValue(0)
+            .setRequiresMcRestart(true)
+            .getInt();
+        this._expSpread = var1
+            .get(
+                var2,
+                "ExpSpread",
+                this._expSpread,
+                "Adds a uniform random 0..(ExpSpread-1) to Exp. Defaults double the vanilla ore XP range.")
+            .setMinValue(0)
+            .setRequiresMcRestart(true)
+            .getInt();
+        this._requireSilkTouch = var1.get(
+            var2,
+            "RequireSilkTouch",
+            this._requireSilkTouch,
+            "If true, Silk Touch is required to get " + this.name()
+                + " in ore-block form (normal mining yields the configured drops). If false, Silk Touch yields the configured drops instead of the block.")
+            .setRequiresMcRestart(true)
+            .getBoolean(this._requireSilkTouch);
     }
 
     public void postConfig(Configuration var1) {
