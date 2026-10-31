@@ -73,4 +73,17 @@ public class ConfigWiringTest {
         assertFalse("Hardcoded double drop is back", source.contains("baseQty = 2"));
         assertFalse("Legacy vanilla-base doubling helper is back", source.contains("getVanillaBaseQuantity"));
     }
+
+    @Test
+    public void overrideWrapperGuardsConstructorTimeVirtualCalls() throws IOException {
+        String source = readSource("src/main/java/powercrystals/netherores/ores/BlockNetherOverrideOre.java");
+
+        // Block's constructor calls isOpaqueCube() before _override is assigned.
+        assertTrue(
+            "isOpaqueCube must tolerate a null _override during Block's constructor",
+            source.contains("this._override == null || this._override.isOpaqueCube()"));
+        // ...and the fields Block derived from that call must be re-synced afterwards.
+        assertTrue("opaque is not re-synced", source.contains("this.opaque = var1.isOpaqueCube()"));
+        assertTrue("lightOpacity is not re-synced", source.contains("this.lightOpacity = var1.getLightOpacity()"));
+    }
 }

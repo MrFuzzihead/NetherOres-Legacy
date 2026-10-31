@@ -56,6 +56,11 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
     public BlockNetherOverrideOre(Block var1) {
         super(var1.getMaterial());
         this._override = var1;
+        // Block's constructor calls isOpaqueCube() virtually *before* this constructor
+        // body runs, so at that point _override was still null and the guard returned
+        // the default (true). Re-sync the fields Block derived from that call.
+        this.opaque = var1.isOpaqueCube();
+        this.lightOpacity = var1.getLightOpacity();
         this.setStepSound(var1.stepSound);
         // Only blocks that have an ItemBlock can be retargeted. Technical blocks (or
         // custom non-ItemBlock items) have nothing to place, so don't crash on them.
@@ -419,7 +424,9 @@ public class BlockNetherOverrideOre extends Block implements INetherOre {
     }
 
     public boolean isOpaqueCube() {
-        return this._override.isOpaqueCube();
+        // Called by Block's constructor before _override is assigned; fall back to the
+        // vanilla default (opaque) in that case instead of NPE-ing.
+        return this._override == null || this._override.isOpaqueCube();
     }
 
     public boolean renderAsNormalBlock() {
