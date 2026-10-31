@@ -92,14 +92,19 @@ public class EntityArmedOre extends Entity {
 
     protected void writeEntityToNBT(NBTTagCompound var1) {
         var1.setByte("Fuse", (byte) this._fuse);
-        var1.setString("STarget", Block.blockRegistry.getNameForObject(this._target));
+        // Guard against the target block no longer existing (block removed from the registry).
+        var1.setString("STarget", this._target == null ? "" : Block.blockRegistry.getNameForObject(this._target));
     }
 
     protected void readEntityFromNBT(NBTTagCompound var1) {
         this._fuse = var1.getByte("Fuse");
-        this._target = Block.getBlockFromName(
-            var1.hasKey("Target") ? Integer.toString(var1.getInteger("Target")) : var1.getString("STarget"));
-        this.setAir(Block.getIdFromBlock(this._target));
+        if (var1.hasKey("STarget")) {
+            this._target = Block.getBlockFromName(var1.getString("STarget"));
+        } else if (var1.hasKey("Target")) {
+            // Legacy integer block-id format written by older versions.
+            this._target = Block.getBlockById(var1.getInteger("Target"));
+        }
+        this.setAir(this._target == null ? -1 : Block.getIdFromBlock(this._target));
     }
 
     @SideOnly(Side.CLIENT)

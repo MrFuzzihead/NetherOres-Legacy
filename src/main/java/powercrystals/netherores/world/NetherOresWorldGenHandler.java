@@ -32,28 +32,36 @@ public class NetherOresWorldGenHandler implements IFeatureGenerator {
         return true;
     }
 
+    private static boolean shouldGenerate(Ores ore, boolean isNewChunk, boolean forceOreSpawn) {
+        if (!(ore.getForced()
+            || ((ore.isRegisteredSmelting() || ore.isRegisteredMacerator() || forceOreSpawn) && !ore.getDisabled()))) {
+            return false;
+        }
+        return isNewChunk || ore.getRetroGen();
+    }
+
     private void generateNether(World world, Random rand, int startX, int startZ, boolean isNewChunk) {
         if (NetherOresCore.enableWorldGen.getBoolean(true)) {
+            boolean forceOreSpawn = NetherOresCore.forceOreSpawn.getBoolean(false);
             for (Ores ore : Ores.values()) {
-                if ((ore.getForced() || (ore.isRegisteredSmelting() || ore.isRegisteredMacerator()
-                    || NetherOresCore.forceOreSpawn.getBoolean(false)) && !ore.getDisabled())
-                    && (isNewChunk || ore.getRetroGen())) {
-                    int groups = ore.getGroupsPerChunk();
-                    while (groups-- > 0) {
-                        int x = startX + rand.nextInt(16);
-                        int y = ore.getMinY() + rand.nextInt(ore.getMaxY() - ore.getMinY());
-                        int z = startZ + rand.nextInt(16);
-                        new WorldGenNetherOres(
-                            NetherOresCore.getOreBlock(ore.getBlockIndex()),
-                            ore.getMetadata(),
-                            ore.getBlocksPerGroup()).generate(world, rand, x, y, z);
-                    }
+                if (!shouldGenerate(ore, isNewChunk, forceOreSpawn)) {
+                    continue;
+                }
+                int groups = ore.getGroupsPerChunk();
+                while (groups-- > 0) {
+                    int x = startX + rand.nextInt(16);
+                    int y = ore.getMinY() + rand.nextInt(ore.getMaxY() - ore.getMinY());
+                    int z = startZ + rand.nextInt(16);
+                    new WorldGenNetherOres(
+                        NetherOresCore.getOreBlock(ore.getBlockIndex()),
+                        ore.getMetadata(),
+                        ore.getBlocksPerGroup()).generate(world, rand, x, y, z);
                 }
             }
         }
 
         if (NetherOresCore.enableHellfish.getBoolean(true)
-            && (isNewChunk || !isNewChunk && NetherOresCore.hellFishRetrogen.getBoolean())) {
+            && (isNewChunk || NetherOresCore.hellFishRetrogen.getBoolean())) {
             int hellfishPerGroup = NetherOresCore.hellFishPerGroup.getInt();
             int hellfishMinY = NetherOresCore.hellFishMinY.getInt();
             int hellfishMaxY = NetherOresCore.hellFishMaxY.getInt();
@@ -72,22 +80,22 @@ public class NetherOresWorldGenHandler implements IFeatureGenerator {
     // Mirrors generateNether but embeds the ores in end stone instead of netherrack.
     private void generateEnd(World world, Random rand, int startX, int startZ, boolean isNewChunk) {
         if (NetherOresCore.enableWorldGen.getBoolean(true)) {
+            boolean forceOreSpawn = NetherOresCore.forceOreSpawn.getBoolean(false);
             for (Ores ore : Ores.values()) {
-                if ((ore.getForced() || (ore.isRegisteredSmelting() || ore.isRegisteredMacerator()
-                    || NetherOresCore.forceOreSpawn.getBoolean(false)) && !ore.getDisabled())
-                    && (isNewChunk || ore.getRetroGen())) {
-                    int groups = ore.getGroupsPerChunk();
-                    while (groups-- > 0) {
-                        int x = startX + rand.nextInt(16);
-                        // The End's main island is low (y < 64); keep ores well inside end stone.
-                        int y = 2 + rand.nextInt(52);
-                        int z = startZ + rand.nextInt(16);
-                        new WorldGenNetherOres(
-                            NetherOresCore.getOreBlock(ore.getBlockIndex()),
-                            ore.getMetadata(),
-                            ore.getBlocksPerGroup(),
-                            Blocks.end_stone).generate(world, rand, x, y, z);
-                    }
+                if (!shouldGenerate(ore, isNewChunk, forceOreSpawn)) {
+                    continue;
+                }
+                int groups = ore.getGroupsPerChunk();
+                while (groups-- > 0) {
+                    int x = startX + rand.nextInt(16);
+                    // The End's main island is low (y < 64); keep ores well inside end stone.
+                    int y = 2 + rand.nextInt(52);
+                    int z = startZ + rand.nextInt(16);
+                    new WorldGenNetherOres(
+                        NetherOresCore.getOreBlock(ore.getBlockIndex()),
+                        ore.getMetadata(),
+                        ore.getBlocksPerGroup(),
+                        Blocks.end_stone).generate(world, rand, x, y, z);
                 }
             }
         }
